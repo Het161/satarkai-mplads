@@ -101,13 +101,54 @@ async function main() {
     }
   }
 
+  // ---- chronology ----------------------------------------------------------
+  // A record can be free of rule violations and still be nonsense: a work
+  // completed before it was sanctioned, or a vendor paid a year after handover.
+  // Planting moves dates around, so these invariants are checked explicitly
+  // rather than assumed — a reviewer opening one such work would rightly stop
+  // trusting every other figure on the page.
+  const chronology: Record<string, string[]> = {};
+  const breach = (rule: string, code: string) => {
+    (chronology[rule] ??= []).push(code);
+  };
+
+  for (const w of works) {
+    if (w.sanctionedAt && w.sanctionedAt < w.recommendedAt) {
+      breach("sanctioned before recommended", w.workCode);
+    }
+    if (w.completedAt && w.sanctionedAt && w.completedAt < w.sanctionedAt) {
+      breach("completed before sanctioned", w.workCode);
+    }
+    if (w.markedCompleteAt && w.completedAt && w.markedCompleteAt < w.completedAt) {
+      breach("marked complete before finished", w.workCode);
+    }
+    for (const p of w.payments) {
+      if (w.sanctionedAt && p.releasedAt < w.sanctionedAt) {
+        breach("paid before sanction", w.workCode);
+      }
+      if (p.releasedAt > NOW) breach("paid in the future", w.workCode);
+      if (
+        w.completedAt &&
+        days(w.completedAt, p.releasedAt) > 60
+      ) {
+        breach("paid over 60 days after completion", w.workCode);
+      }
+      for (const e of p.evidence) {
+        if (e.uploadedAt > NOW) breach("evidence uploaded in the future", w.workCode);
+      }
+    }
+  }
+
   // ENTITLEMENT_BREACH — recommendations per MP per FY above the entitlement.
+  // Cancelled recommendations release their earmarked funds, so they are
+  // excluded here exactly as the detector excludes them.
   const overEntitlement = await prisma.$queryRaw<
     { mpId: string; financialYear: string; total: number }[]
   >`SELECT w."mpId", w."financialYear", SUM(w."recommendedAmount")::float AS total
       FROM "Work" w
       JOIN "Entitlement" e
         ON e."mpId" = w."mpId" AND e."financialYear" = w."financialYear"
+     WHERE w."status" <> 'CANCELLED'
      GROUP BY w."mpId", w."financialYear", e."amountAuthorised"
     HAVING SUM(w."recommendedAmount") > e."amountAuthorised"`;
 
@@ -139,16 +180,32 @@ async function main() {
   );
 
   const leakedRules = Object.keys(leaks);
-  if (leakedRules.length === 0) {
-    console.log("\nbaseline clean — no unlabelled work trips a rule detector.");
+  const chronoBreaches = Object.keys(chronology);
+
+  if (leakedRules.length > 0) {
+    console.log("\nBASELINE LEAKS (unlabelled works that would fire a detector):");
+    for (const rule of leakedRules) {
+      console.log(`  ${rule.padEnd(36)} ${leaks[rule].length}`);
+      console.log(`    e.g. ${leaks[rule].slice(0, 3).join(", ")}`);
+    }
+  }
+
+  if (chronoBreaches.length > 0) {
+    console.log("\nCHRONOLOGY BREACHES (records that do not make sense in time):");
+    for (const rule of chronoBreaches) {
+      const codes = [...new Set(chronology[rule])];
+      console.log(`  ${rule.padEnd(36)} ${codes.length} work(s)`);
+      console.log(`    e.g. ${codes.slice(0, 3).join(", ")}`);
+    }
+  }
+
+  if (leakedRules.length === 0 && chronoBreaches.length === 0) {
+    console.log(
+      "\nbaseline clean — no unlabelled work trips a rule detector, and every record is chronologically coherent.",
+    );
     return;
   }
 
-  console.log("\nBASELINE LEAKS (unlabelled works that would fire a detector):");
-  for (const rule of leakedRules) {
-    console.log(`  ${rule.padEnd(20)} ${leaks[rule].length}`);
-    console.log(`    e.g. ${leaks[rule].slice(0, 3).join(", ")}`);
-  }
   process.exitCode = 1;
 }
 

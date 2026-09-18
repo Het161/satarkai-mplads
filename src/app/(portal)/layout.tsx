@@ -55,6 +55,7 @@ async function jurisdictionName(user: {
 
 const NAV = [
   { href: "/dashboard", label: "Dashboard" },
+  { href: "/alerts", label: "Alerts" },
   { href: "/works", label: "Works" },
 ];
 

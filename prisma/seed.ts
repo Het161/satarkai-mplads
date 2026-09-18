@@ -89,6 +89,7 @@ type SeedWork = {
   description: string;
   workType: string;
   category: string;
+  locality: string;
   recommendedAt: Date;
   recommendedAmount: number;
   financialYear: string;
@@ -278,7 +279,13 @@ async function main() {
           mp.homeDistrictCode && !chance(0.15)
             ? stateDistricts.find((d) => d.code === mp.homeDistrictCode)!
             : pick(stateDistricts);
-        const locality = pick(LOCALITIES);
+        // One work type per locality per district, at most. Without this the
+        // generator produces genuinely identical titles by chance — two
+        // "Borewell with Handpump at Ward No. 4, Surat" works that a duplicate
+        // detector is right to flag. Those would be indistinguishable from the
+        // duplicates planted on purpose, and would wreck the ground truth.
+        const locality = uniqueLocality(district.code, wt.type);
+        if (!locality) continue;
 
         // Recommendation date: inside the FY, and clear of the last 40 days so
         // the baseline never trips FY-end clustering.
@@ -297,6 +304,7 @@ async function main() {
           description: `Construction/provision of ${wt.type.toLowerCase()} at ${locality} in ${district.name} district, recommended under MPLADS for creation of a durable community asset.`,
           workType: wt.type,
           category: wt.category,
+          locality,
           recommendedAt,
           recommendedAmount: amount,
           financialYear: fy,
@@ -326,6 +334,7 @@ async function main() {
   // ==========================================================================
 
   const planted = plantAnomalies(works, mps, agencies);
+  normalisePaymentDates(works);
   const trimmed = reconcileEntitlements(works);
   if (trimmed > 0) {
     console.log(`  entitlement reconciliation: trimmed ${trimmed} unlabelled work(s)`);
@@ -355,6 +364,7 @@ async function main() {
         description: w.description,
         workType: w.workType,
         category: w.category,
+        locality: w.locality,
         recommendedAt: w.recommendedAt,
         recommendedAmount: w.recommendedAmount,
         financialYear: w.financialYear,
@@ -543,7 +553,18 @@ function buildPayments(w: SeedWork, _iaName: string) {
 
   const stages = w.sanctionedAmount > 3_000_000 ? int(3, 4) : int(2, 3);
   const vendor = pick(FICTIONAL_VENDORS);
-  const durationSoFar = daysBetween(w.sanctionedAt, NOW);
+
+  // Payments run alongside the work, so they end when the work does — not at
+  // today's date. Spreading a finished work's stages out to "now" produces a
+  // final bill released a year after the asset was handed over, which no
+  // reviewer would believe. A short settlement tail after completion is normal.
+  const executionEnd = w.completedAt
+    ? addDays(w.completedAt, int(5, 45))
+    : NOW;
+  const durationSoFar = Math.max(
+    1,
+    daysBetween(w.sanctionedAt, executionEnd < NOW ? executionEnd : NOW),
+  );
 
   // Payments trail progress — the baseline never pays ahead of the work.
   const paidShare = Math.max(0, (w.progressPct / 100) * (0.80 + rnd() * 0.12));
@@ -682,8 +703,16 @@ function plantAnomalies(
     let n = 0;
     for (const mpIndex of breachMps) {
       const fy = "2025-26";
+      // Cancelled recommendations release their earmarked funds, so they do
+      // not count towards the year's commitment — and the detector is right to
+      // exclude them. Inflating a cancelled work would plant a breach that
+      // correctly never fires, and the ground truth would then be wrong.
       const theirs = works.filter(
-        (w) => w.mpIndex === mpIndex && w.financialYear === fy && !used.has(w.workCode),
+        (w) =>
+          w.mpIndex === mpIndex &&
+          w.financialYear === fy &&
+          w.status !== "CANCELLED" &&
+          !used.has(w.workCode),
       );
       if (theirs.length < 2) continue;
       const total = theirs.reduce((s, w) => s + w.recommendedAmount, 0);
@@ -726,8 +755,21 @@ function plantAnomalies(
     for (const w of chosen) {
       w.status = "COMPLETED_UNMARKED";
       w.progressPct = 100;
-      w.completedAt = addDays(w.sanctionedAt!, int(150, 300));
+      // The completion date must be safely in the past: an agency cannot be
+      // late marking a work that has not finished yet, and a detector is right
+      // to ignore one that is. These works were sanctioned over 240 days ago,
+      // so pulling the date back stays clear of the sanction date.
+      const naturalFinish = addDays(w.sanctionedAt!, int(150, 300));
+      w.completedAt =
+        naturalFinish > addDays(NOW, -15) ? addDays(NOW, -int(20, 200)) : naturalFinish;
       w.markedCompleteAt = null;
+      // Payments were laid out against the work's earlier timeline; pull any
+      // that now post-date completion back behind it, so the record does not
+      // show a vendor being paid long after the asset was finished.
+      const settleBy = addDays(w.completedAt, 30);
+      for (const pay of w.payments) {
+        if (pay.releasedAt > settleBy) pay.releasedAt = addDays(settleBy, -int(0, 60));
+      }
       const stale = daysBetween(w.completedAt, NOW);
       w.planted.push(
         note("STUCK_UNMARKED", `Work recorded at 100% progress and complete since ${w.completedAt.toISOString().slice(0, 10)}, but the implementing agency has not marked it complete — ${stale} days pending.`),
@@ -744,7 +786,10 @@ function plantAnomalies(
     for (const base of bases) {
       const clone: SeedWork = structuredClone(base);
       clone.workCode = `${base.workCode}-D`;
-      clone.title = base.title.replace(" at ", " at the ").replace("Ward No.", "Ward no.");
+      // A duplicate recommendation describes the SAME asset in the same place;
+      // what differs is the wording. Locality is carried over unchanged, which
+      // is exactly the signal the detector looks for.
+      clone.title = `Construction of ${base.workType.toLowerCase()} at ${base.locality}, ${base.title.split(", ").pop()}`;
       clone.description = `${base.description} (Re-recommended for the same location.)`;
       // Shift forward, but never past "today" — a recommendation dated in the
       // future would be a data error, not an anomaly.
@@ -753,10 +798,29 @@ function plantAnomalies(
       clone.planted = [
         note("DUPLICATE", `Near-identical to ${base.workCode}: same work type and locality in ${base.districtCode}, recommended ${daysBetween(base.recommendedAt, clone.recommendedAt)} days apart.`),
       ];
+      // Shift the WHOLE timeline by the same amount. Moving only the sanction
+      // date leaves the copied payments sitting before their own sanction and
+      // the completion date before the work started — a record no reviewer
+      // would trust, and nothing the duplicate rule needs.
       if (clone.sanctionedAt) {
         clone.sanctionedAt = nudgeClearOfFyEnd(
           clampToNow(addDays(clone.sanctionedAt, shift)),
         );
+        // Nudging away from the year-end window moves the sanction backwards,
+        // which can push it behind the recommendation it followed.
+        if (clone.sanctionedAt <= clone.recommendedAt) {
+          clone.recommendedAt = addDays(clone.sanctionedAt, -int(25, 70));
+        }
+      }
+      if (clone.completedAt) clone.completedAt = clampToNow(addDays(clone.completedAt, shift));
+      if (clone.markedCompleteAt) {
+        clone.markedCompleteAt = clampToNow(addDays(clone.markedCompleteAt, shift));
+      }
+      for (const pay of clone.payments) {
+        pay.releasedAt = clampToNow(addDays(pay.releasedAt, shift));
+        for (const e of pay.evidence) {
+          e.uploadedAt = clampToNow(addDays(e.uploadedAt, shift));
+        }
       }
       works.push(clone);
       used.add(clone.workCode);
@@ -767,32 +831,67 @@ function plantAnomalies(
 
   // 8. FY_END_SPIKE — sanctions crowded into the closing weeks of a financial
   //    year, the classic year-end fund-exhaustion pattern.
+  //
+  //    Planted as a CLUSTER inside a handful of districts, because that is what
+  //    the behaviour actually looks like: a district racing to commit an
+  //    unspent balance before 31 March. A detector worth having compares each
+  //    district's year-end share against its own normal spread, so scattering
+  //    one late sanction per district would be nothing to detect.
   {
-    const chosen = take((w) => !!w.sanctionedAt && w.financialYear === "2024-25", 20);
+    const spikeDistricts = ["TN-CBE", "AS-DIB", "MH-NSK", "UP-MRT"];
     const close = fyEnd("2024-25");
-    for (const w of chosen) {
-      const shifted = addDays(close, -int(1, 14));
-      w.sanctionedAt = shifted;
-      if (w.recommendedAt >= shifted) w.recommendedAt = addDays(shifted, -int(20, 60));
-      for (const p of w.payments) {
-        if (p.releasedAt < shifted) p.releasedAt = addDays(shifted, int(1, 20));
-      }
-      w.planted.push(
-        note("FY_END_SPIKE", `Sanctioned on ${shifted.toISOString().slice(0, 10)}, within the final fortnight of FY 2024-25 — part of an unusual cluster of year-end sanctions.`),
+    let n = 0;
+
+    for (const dc of spikeDistricts) {
+      const chosen = take(
+        (w) =>
+          w.districtCode === dc && !!w.sanctionedAt && w.financialYear === "2024-25",
+        6,
       );
+      // Two late sanctions are not a spike, and the detector is right to say
+      // so. Only plant where a genuine cluster can form.
+      if (chosen.length < 4) continue;
+
+      for (const w of chosen) {
+        const shifted = addDays(close, -int(1, 14));
+        // Move the whole timeline by the same delta. Pushing the sanction date
+        // forward on its own can leave a work completed months before it was
+        // sanctioned, which is a worse data error than the one being planted.
+        const delta = daysBetween(w.sanctionedAt!, shifted);
+        w.sanctionedAt = shifted;
+        if (w.recommendedAt >= shifted) w.recommendedAt = addDays(shifted, -int(20, 60));
+        if (w.completedAt) w.completedAt = clampToNow(addDays(w.completedAt, delta));
+        if (w.markedCompleteAt) {
+          w.markedCompleteAt = clampToNow(addDays(w.markedCompleteAt, delta));
+        }
+        for (const p of w.payments) {
+          p.releasedAt = clampToNow(addDays(p.releasedAt, delta));
+          for (const e of p.evidence) e.uploadedAt = clampToNow(addDays(e.uploadedAt, delta));
+        }
+        w.planted.push(
+          note("FY_END_SPIKE", `Sanctioned on ${shifted.toISOString().slice(0, 10)}, inside the final fortnight of FY 2024-25 — one of ${chosen.length} sanctions crowded into the year-end window in ${dc}.`),
+        );
+        n++;
+      }
     }
-    tally("FY_END_SPIKE", chosen.length);
+    tally("FY_END_SPIKE", n);
   }
 
   // 9. COST_OUTLIER — cost per unit far above the peer distribution for the
   //    same work type. Detected by the ML layer against district/state peers.
+  //
+  //    Every amount scales by the SAME factor, payments included, so the
+  //    paid-to-sanctioned ratio is untouched. Inflating the sanction while
+  //    leaving payments at a fixed share would make these works read as
+  //    payment-ahead-of-progress as well, and the ground truth would then be
+  //    wrong about which rule the work actually breaks.
   {
     const chosen = take((w) => !!w.sanctionedAmount && w.unitCount >= 1, 14);
     for (const w of chosen) {
       const factor = 2.4 + rnd() * 1.8;
       w.recommendedAmount = round(w.recommendedAmount * factor, 1000);
       w.sanctionedAmount = round(w.sanctionedAmount! * factor, 1000);
-      redistribute(w, round(w.sanctionedAmount * 0.7, 1000));
+      for (const p of w.payments) p.amount = round(p.amount * factor, 1000);
       const perUnit = Math.round(w.sanctionedAmount / w.unitCount);
       w.planted.push(
         note("COST_OUTLIER", `Sanctioned at ₹${perUnit.toLocaleString("en-IN")} per unit for "${w.workType}" — roughly ${factor.toFixed(1)}x the typical cost of comparable works.`),
@@ -832,6 +931,68 @@ function plantAnomalies(
 const clampToNow = (d: Date) => (d > NOW ? NOW : d);
 
 /**
+ * Planting moves sanction dates and completion dates around, which can leave a
+ * payment stranded long after the asset was finished. Nothing about any rule
+ * depends on that, and it reads as a data error to anyone opening the work, so
+ * a final pass pulls stray payment dates back inside the work's own timeline.
+ */
+function normalisePaymentDates(works: SeedWork[]) {
+  const SETTLEMENT_TAIL_DAYS = 45;
+
+  for (const w of works) {
+    if (w.payments.length === 0) continue;
+    const latest = w.completedAt
+      ? addDays(w.completedAt, SETTLEMENT_TAIL_DAYS)
+      : NOW;
+
+    // A payment belongs inside [sanction, completion + tail], and never in the
+    // future. Clamp rather than resample, so a work whose two bounds are only
+    // days apart still lands on a valid date instead of oscillating between
+    // two conflicting rules.
+    const earliest = w.sanctionedAt ?? w.recommendedAt;
+    const upper = new Date(Math.min(latest.getTime(), NOW.getTime()));
+
+    for (const p of w.payments) {
+      if (p.releasedAt > upper) {
+        p.releasedAt = new Date(
+          Math.max(earliest.getTime(), addDays(upper, -int(0, 30)).getTime()),
+        );
+      }
+      if (p.releasedAt < earliest) {
+        p.releasedAt = new Date(
+          Math.min(upper.getTime(), addDays(earliest, int(5, 30)).getTime()),
+        );
+      }
+
+      for (const e of p.evidence) {
+        e.uploadedAt = clampToNow(addDays(p.releasedAt, int(0, 4)));
+      }
+    }
+
+    w.payments.sort((a, b) => a.stageNo - b.stageNo);
+  }
+}
+
+/**
+ * Claim a locality for a (district, work type) pair, so no two generated works
+ * describe the same asset in the same place. Returns null once a district has
+ * exhausted the locality pool for that work type.
+ */
+const claimedLocalities = new Set<string>();
+
+function uniqueLocality(districtCode: string, workType: string): string | null {
+  const start = int(0, LOCALITIES.length - 1);
+  for (let i = 0; i < LOCALITIES.length; i++) {
+    const locality = LOCALITIES[(start + i) % LOCALITIES.length];
+    const key = `${districtCode}|${workType}|${locality}`;
+    if (claimedLocalities.has(key)) continue;
+    claimedLocalities.add(key);
+    return locality;
+  }
+  return null;
+}
+
+/**
  * Keep a date out of the closing weeks of its financial year, so a work that
  * was not planted as FY-end clustering does not drift into that window and
  * pollute the ground truth.
@@ -852,6 +1013,9 @@ function nudgeClearOfFyEnd(d: Date): Date {
 function reconcileEntitlements(works: SeedWork[]) {
   const buckets = new Map<string, SeedWork[]>();
   for (const w of works) {
+    // Cancelled recommendations release their funds, so they are outside the
+    // year's commitment — the same accounting the detector uses.
+    if (w.status === "CANCELLED") continue;
     const key = `${w.mpIndex}|${w.financialYear}`;
     (buckets.get(key) ?? buckets.set(key, []).get(key)!).push(w);
   }

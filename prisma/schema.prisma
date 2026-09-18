@@ -155,6 +155,10 @@ model Work {
   description String
   workType    String // "Community Hall", "Borewell", ... — peer group for cost outliers
   category    String // Drinking Water / Education / Health / Roads / ...
+  /// Where the asset is: ward, gram panchayat, colony. The duplicate detector
+  /// compares this rather than the free-text title, which is mostly the work
+  /// type and district repeated and so matches everything in its own group.
+  locality    String
 
   // 1. MP recommends and earmarks funds from the entitlement
   recommendedAt     DateTime

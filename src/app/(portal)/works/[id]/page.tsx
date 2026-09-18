@@ -2,12 +2,18 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 
-import { Card, CardHeader, Tag } from "@/components/ui";
+import { Card, CardHeader, SeverityBadge, Tag } from "@/components/ui";
 import { requireSession } from "@/lib/auth";
 import { scoped } from "@/lib/scope";
 import { prisma } from "@/lib/db";
 import { daysBetween, formatDate, formatINR, money } from "@/lib/format";
-import { COMPLETION_WINDOW_DAYS, WORK_STATUS_LABELS } from "@/lib/scheme";
+import {
+  ALERT_TYPE_LABELS,
+  ALERT_TYPE_STEP,
+  COMPLETION_WINDOW_DAYS,
+  LIFECYCLE_STEPS,
+  WORK_STATUS_LABELS,
+} from "@/lib/scheme";
 
 export const metadata: Metadata = { title: "Work detail" };
 export const dynamic = "force-dynamic";
@@ -30,6 +36,7 @@ export default async function WorkDetailPage({
       ia: true,
       payments: { orderBy: { stageNo: "asc" }, include: { evidence: true } },
       evidence: true,
+      alerts: { orderBy: { score: "desc" } },
     },
   });
 
@@ -153,12 +160,63 @@ export default async function WorkDetailPage({
               </table>
             </div>
           )}
-          <p className="border-t border-line px-4 py-2 text-2xs text-slate">
-            Risk signals for this work are attached to the exact stage they
-            concern from Phase 2 onward.
-          </p>
         </Card>
       </div>
+
+      <Card>
+        <CardHeader
+          title={
+            work.alerts.length === 0
+              ? "Risk signals"
+              : `${work.alerts.length} risk signal${work.alerts.length === 1 ? "" : "s"}`
+          }
+          subtitle="Grouped by the point in the scheme's process each one concerns. Signals are prompts for review, not findings."
+        />
+        {work.alerts.length === 0 ? (
+          <p className="px-4 py-6 text-center text-2xs text-slate">
+            No rule detector has flagged this work.
+          </p>
+        ) : (
+          <ul className="divide-y divide-line/60">
+            {LIFECYCLE_STEPS.flatMap((step) => {
+              const atStep = work.alerts.filter(
+                (a) => ALERT_TYPE_STEP[a.type] === step,
+              );
+              if (atStep.length === 0) return [];
+              return (
+                <li key={step} className="px-4 py-3">
+                  <div className="text-2xs font-medium uppercase tracking-wide text-slate">
+                    {step}
+                  </div>
+                  <ul className="mt-1.5 space-y-2">
+                    {atStep.map((a) => (
+                      <li key={a.id}>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <SeverityBadge severity={a.severity}>
+                            {a.severity.toLowerCase()}
+                          </SeverityBadge>
+                          <span className="tnum rounded border border-line bg-paper px-1.5 py-0.5 text-2xs font-semibold text-ink">
+                            {a.score}
+                          </span>
+                          <Link
+                            href={`/alerts/${a.id}`}
+                            className="text-sm font-medium text-navy hover:underline"
+                          >
+                            {ALERT_TYPE_LABELS[a.type]}
+                          </Link>
+                        </div>
+                        <p className="mt-0.5 max-w-3xl text-2xs leading-relaxed text-slate">
+                          {a.reason}
+                        </p>
+                      </li>
+                    ))}
+                  </ul>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </Card>
     </div>
   );
 }

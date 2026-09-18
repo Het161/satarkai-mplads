@@ -84,6 +84,37 @@ export const ALERT_TYPE_LABELS = {
   ML_ANOMALY: "Multivariate anomaly",
 } as const;
 
+/**
+ * The step of the eSAKSHI lifecycle each signal concerns, so a work's timeline
+ * can pin every alert to the point in the process where it arose rather than
+ * listing them all at the bottom.
+ */
+export const ALERT_TYPE_STEP = {
+  ENTITLEMENT_BREACH: "Recommendation & earmarking",
+  DUPLICATE: "Recommendation & earmarking",
+  COST_OUTLIER: "Sanction",
+  FY_END_SPIKE: "Sanction",
+  OVERDUE: "Completion window",
+  IA_CONCENTRATION: "Designation of the implementing agency",
+  PAYMENT_AHEAD: "Vendor payments",
+  COST_OVERRUN: "Vendor payments",
+  MISSING_EVIDENCE: "Asset evidence",
+  STUCK_UNMARKED: "Completion marking",
+  ML_ANOMALY: "Across the whole record",
+} as const;
+
+/** The lifecycle steps in order, for grouping a work's alerts. */
+export const LIFECYCLE_STEPS = [
+  "Recommendation & earmarking",
+  "Sanction",
+  "Designation of the implementing agency",
+  "Vendor payments",
+  "Asset evidence",
+  "Completion window",
+  "Completion marking",
+  "Across the whole record",
+] as const;
+
 export const WORK_STATUS_LABELS = {
   RECOMMENDED: "Recommended by MP",
   SANCTIONED: "Sanctioned",

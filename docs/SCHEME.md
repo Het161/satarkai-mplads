@@ -51,6 +51,20 @@ These five are the scheme's actual roles, and they are exactly the roles
 | `DUPLICATE` | 2, 3 | Near-identical work description, same district, overlapping period. |
 | `FY_END_SPIKE` | 3, 5 | Abnormal clustering of sanctions or payments in the closing weeks of a financial year. |
 
+All eight are implemented in
+[`src/lib/detectors/rules.ts`](../src/lib/detectors/rules.ts). Two design rules
+apply across them:
+
+- **They partition rather than overlap.** A finished-but-unmarked work is
+  reported as `STUCK_UNMARKED`, not additionally as `OVERDUE`; a work paid past
+  its sanction is a `COST_OVERRUN`, not additionally `PAYMENT_AHEAD`. One work
+  can raise several alerts when it genuinely breaks several rules, but a single
+  failure is reported once.
+- **Cluster rules compare against a baseline.** `FY_END_SPIKE` does not flag
+  every March sanction — some always land there. It compares each
+  district-year's share of late sanctions against the evenly-spread rate and
+  requires at least three works, so it reports crowding rather than a date.
+
 ### ML-based — explainable, unsupervised
 
 No labelled corpus of MPLADS fraud exists, so nothing here is trained on

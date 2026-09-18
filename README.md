@@ -50,7 +50,7 @@ Reference portal: <https://mplads.mospi.gov.in/digigov/dashboard.html>
 | Phase | Scope | State |
 |-------|-------|-------|
 | **1** | Repo, stack, design tokens, Prisma schema, auth + `scopeFor()` RBAC, seed with planted anomalies | **Done** |
-| 2 | Eight rule detectors, alert generation with reason + evidence, alert queue | Not started |
+| **2** | Eight rule detectors, alert generation with reason + evidence, alert queue | **Done** |
 | 3 | FastAPI ML service — IsolationForest score + delay-risk, explainable, rules-only fallback, eval script | Not started |
 | 4 | Four role dashboards + single-work drill-down timeline | Not started |
 | 5 | Review workflow, audit trail, notifications, CSV/PDF export | Not started |
@@ -71,6 +71,7 @@ cp .env.example .env          # then set DATABASE_URL and SESSION_SECRET
 createdb satarkai
 npm run db:push               # apply the schema
 npm run db:seed               # generate the synthetic dataset
+npm run detect                # run the rule engine, populating the alert queue
 
 npm run dev                   # http://localhost:3000
 ```
@@ -99,6 +100,8 @@ state code (`gj`, `mh`, `up`, `tn`, `wb`, `as`).
 | `npm run db:push` | Apply the Prisma schema |
 | `npm run db:seed` | Regenerate the synthetic dataset (destructive) |
 | `npm run db:reset` | Drop, re-push and re-seed |
+| `npm run detect` | Run the rule engine and reconcile the alert queue |
+| `npm run eval` | Score the detectors against the planted ground truth |
 | `npm run check:baseline` | Verify the seed's clean baseline (see below) |
 | `npm test` | RBAC isolation tests against the seeded database |
 | `npm run typecheck` / `lint` | `tsc --noEmit` / `next lint` |
@@ -131,9 +134,10 @@ Two properties make this hold up:
 A cross-jurisdiction drill-down is **not found**, not refused — the id and the
 scope sit in the same `WHERE`, so the page cannot confirm the record exists.
 
-`npm test` proves all of it against the real seeded database: 13 tests covering
-each role's isolation, cross-jurisdiction drill-down, and the deny-by-default
-path for anchorless and unknown roles.
+`npm test` proves all of it against the real seeded database: 34 tests in total,
+covering each role's isolation, cross-jurisdiction drill-down, the
+deny-by-default path for anchorless and unknown roles, the detector scoring
+maths, and the recall and precision claims above.
 
 ---
 
@@ -156,15 +160,92 @@ So:
 `npm run check:baseline` re-implements the rule conditions independently of the
 detectors — so the two cannot agree by sharing a bug — and reports any leak.
 
-Current dataset: **946 works** across 6 states, 36 districts, 36 fictional MPs
-and 108 fictional agencies, with 2,189 payment stages, 4,330 evidence records,
-and **136 ground-truth labels covering all ten anomaly types**, spread across
-every state (16–28 per state) rather than piled into one.
+It also checks **chronology**, because a record can break no rule and still be
+nonsense: a work completed before it was sanctioned, a vendor paid a year after
+handover, evidence uploaded in the future. Planting moves dates around, and
+every one of those errors appeared at some point during Phase 2. A reviewer who
+finds one stops trusting every other figure on the page, so they are asserted
+rather than assumed.
+
+Current dataset: **912 works** across 6 states, 36 districts, 36 fictional MPs
+and 108 fictional agencies, with 2,036 payment stages, 4,022 evidence records,
+and **130 ground-truth labels covering all ten anomaly types**, spread across
+every state rather than piled into one.
 
 `PlantedAnomaly` exists only because the data is synthetic. A real feed has no
 labels, which is precisely why the ML layer is unsupervised.
 
 ---
+
+## The rule engine
+
+Eight deterministic detectors, one per rule in
+[`docs/SCHEME.md`](docs/SCHEME.md). Each reads its threshold from
+[`src/lib/scheme.ts`](src/lib/scheme.ts) rather than inlining a number, so an
+officer can see what fired and an administrator can retune it.
+
+Every alert carries four things, because a signal nobody can check is not
+oversight:
+
+1. **A reason** — one sentence, in plain language, with the actual figures.
+2. **The rule** — stated in words, including its threshold.
+3. **The records** — the payment stages, peer works or other recommendations
+   the rule read, with the breaching row marked.
+4. **The score, itemised** — each weighted component, its basis, and its
+   contribution, adding up in front of the reader.
+
+The Anomaly-Priority Score (0–100) weighs *how badly the rule is broken*
+against *how much money is exposed*. Value is log-scaled, so a ₹5 crore work
+outranks a ₹5 lakh one without burying it a hundred places deeper.
+
+The rules **partition rather than overlap**. A work finished but never marked
+complete is not also reported as overdue; a work paid beyond its sanction is a
+cost overrun, not additionally payment-ahead-of-progress. One work can still
+raise several alerts when it genuinely breaks several rules — but a single
+failure is reported once.
+
+Re-running the engine is safe. An alert that still fires has its score and
+evidence refreshed but **keeps its review state**, so an alert an officer marked
+explained does not silently reopen. An alert that stops firing is withdrawn only
+if nobody ever acted on it; once there is a decision on the record, the record
+outranks the tidiness of the queue.
+
+### Accuracy, and what the number is worth
+
+`npm run eval` scores the detectors against the planted ground truth. All eight
+currently sit at **100% precision and 100% recall** over 114 alerts.
+
+**That figure measures internal consistency, not real-world accuracy.** The seed
+and the detectors were built against the same definition of each rule, so a
+perfect score is the expected result of both being correct — it says the rules
+fire on what they are meant to and nothing else. It says nothing about how much
+irregularity exists in real MPLADS execution, and it will not survive contact
+with real data unchanged. Treat it as a regression test, which is what it is.
+
+The number only means anything because the baseline is clean: see below.
+
+### What the accuracy work actually found
+
+Every gap the eval opened up turned out to be a modelling error, not a tuning
+problem, and each was fixed at the source:
+
+- **Duplicate detection matched boilerplate.** Comparing whole titles inside a
+  district-and-work-type group scored "Covered Drainage Line at Ward No. 17,
+  Surat" against "… at Ward No. 4, Surat" at 91% — two different drains in two
+  different wards. The group had already controlled for type and district, so
+  the only discriminating part was the location. `Work.locality` is now an
+  explicit field, as it is in eSAKSHI, and the rule compares that.
+- **Year-end clustering is a cluster, not a date filter.** Some sanctions always
+  land in March. The rule compares each district-year's share of late sanctions
+  against the evenly-spread rate and needs at least three works, so it reports
+  crowding rather than a calendar.
+- **Cluster members all scored alike.** Every work in a year-end cluster was
+  scored by the cluster's total value, producing fifteen near-identical alerts
+  that buried every other kind at the top of the queue. Each work is now scored
+  by its own amount.
+- **Cancelled recommendations release their funds**, so they are outside the
+  entitlement total. The detector, the seed and the baseline check now use the
+  same accounting.
 
 ## Design
 
@@ -194,6 +275,8 @@ on a network call.
 - `IA_CONCENTRATION` and `COST_OUTLIER` are statistical signals. A dominant
   agency in a district may simply be the only one competent to do the work.
 - No detector output is evidence of wrongdoing.
+- The 100% eval figure is a regression test against data built to the same rule
+  definitions. It is not a claim about real-world accuracy.
 
 ## Further reading
 
