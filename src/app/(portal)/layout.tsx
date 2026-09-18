@@ -58,6 +58,7 @@ const NAV = [
   { href: "/alerts", label: "Alerts" },
   { href: "/forecast", label: "Early warning" },
   { href: "/works", label: "Works" },
+  { href: "/audit", label: "Audit trail" },
 ];
 
 export default async function PortalLayout({
@@ -69,7 +70,10 @@ export default async function PortalLayout({
   if (!user) redirect("/login");
 
   const scope = scopeFor(user);
-  const jurisdiction = await jurisdictionName(user);
+  const [jurisdiction, unread] = await Promise.all([
+    jurisdictionName(user),
+    prisma.notification.count({ where: { userId: user.id, readAt: null } }),
+  ]);
 
   return (
     <div className="min-h-screen">
@@ -94,6 +98,21 @@ export default async function PortalLayout({
           </nav>
 
           <div className="ml-auto flex min-w-0 items-center gap-3">
+            <Link
+              href="/notifications"
+              className="relative rounded px-2.5 py-1 text-2xs font-medium text-slate hover:bg-paper hover:text-ink"
+            >
+              Notifications
+              {unread > 0 ? (
+                <span className="tnum ml-1 rounded-full bg-severity-info px-1.5 py-0.5 text-[10px] font-semibold text-white">
+                  {unread > 99 ? "99+" : unread}
+                </span>
+              ) : null}
+              <span className="sr-only">
+                {unread > 0 ? `${unread} unread` : "none unread"}
+              </span>
+            </Link>
+
             <div className="min-w-0 text-right">
               <div className="truncate text-2xs font-medium text-ink">
                 {user.name}

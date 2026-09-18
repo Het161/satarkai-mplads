@@ -276,8 +276,10 @@ model User {
   active    Boolean  @default(true)
   createdAt DateTime @default(now())
 
-  alertActions AlertAction[]
-  auditLogs    AuditLog[]
+  alertActions  AlertAction[]
+  auditLogs     AuditLog[]
+  notifications Notification[]
+  outcomes      DetectorOutcome[]
 }
 
 model AuditLog {
@@ -339,4 +341,74 @@ model DelayRisk {
   computedAt   DateTime @default(now())
 
   @@index([band, probability])
+}
+
+enum NotificationChannel {
+  IN_APP
+  EMAIL
+  SMS // stubbed — the adapter records the intent without sending
+  IVR // stubbed
+}
+
+enum NotificationStatus {
+  PENDING
+  SENT
+  FAILED
+  SKIPPED // channel not configured; recorded rather than silently dropped
+}
+
+/// A message raised for a person, on a channel.
+///
+/// Notifications are written even when the channel cannot deliver, with the
+/// reason recorded. A monitoring platform that silently fails to notify is
+/// worse than one that does not notify at all, because nobody knows.
+model Notification {
+  id        String              @id @default(cuid())
+  userId    String
+  user      User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  channel   NotificationChannel
+  status    NotificationStatus  @default(PENDING)
+  subject   String
+  body      String
+  /// What it is about, so the UI can link back.
+  entity    String
+  entityId  String
+  readAt    DateTime?
+  sentAt    DateTime?
+  error     String?
+  createdAt DateTime            @default(now())
+
+  @@index([userId, readAt])
+  @@index([entity, entityId])
+}
+
+/// What a human decided about a detector's output.
+///
+/// This is the feedback loop the problem statement asks for, made concrete.
+/// Every alert an officer closes records the detector that raised it, the score
+/// it carried and what the officer concluded — so a later tuning pass can ask
+/// "at what score did this rule start being explained away?" rather than
+/// guessing. `npm run tune` reads this table.
+///
+/// It is written only when a human reaches a conclusion. Nothing here is
+/// produced by the engine, and nothing feeds back automatically: a threshold
+/// changes when a person changes it.
+model DetectorOutcome {
+  id       String     @id @default(cuid())
+  alertId  String     @unique
+  type     AlertType
+  severity Severity
+  score    Int
+  /// EXPLAINED — the officer found a legitimate reason.
+  /// ESCALATED — the officer thought it warranted action above them.
+  resolution AlertState
+  note       String?
+  byUserId   String
+  byUser     User       @relation(fields: [byUserId], references: [id])
+  /// Hours between the alert being raised and the decision.
+  hoursToDecide Float
+  districtId String
+  at         DateTime @default(now())
+
+  @@index([type, resolution])
 }

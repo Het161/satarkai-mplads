@@ -3,13 +3,15 @@ import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 
 import { EvidencePanels } from "@/components/AlertEvidence";
+import { ReviewPanel } from "@/components/ReviewPanel";
 import { HumanDecidesNotice } from "@/components/DataNotices";
 import { Card, CardHeader, SeverityBadge, Tag } from "@/components/ui";
 import { requireSession } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import type { AlertEvidence } from "@/lib/detectors/types";
 import { formatDate, formatINR } from "@/lib/format";
-import { canActOnAlerts, scoped } from "@/lib/scope";
+import { scoped } from "@/lib/scope";
+import { availableActions, canAct, escalatesTo, ALERT_STATE_LABELS } from "@/lib/review";
 import { ALERT_TYPE_LABELS, WORK_STATUS_LABELS } from "@/lib/scheme";
 
 export const metadata: Metadata = { title: "Alert" };
@@ -68,7 +70,13 @@ export default async function AlertDetailPage({
             {alert.score}
             <span className="ml-1 text-2xs font-normal text-slate">/ 100</span>
           </span>
-          <Tag>{alert.state.replace(/_/g, " ").toLowerCase()}</Tag>
+          <Tag>{ALERT_STATE_LABELS[alert.state]}</Tag>
+          <a
+            href={`/api/export/alert/${alert.id}`}
+            className="ml-auto rounded border border-line bg-white px-2.5 py-1 text-2xs font-medium text-navy hover:bg-paper"
+          >
+            Download case note (PDF)
+          </a>
         </div>
         <p className="mt-2 max-w-4xl text-sm leading-relaxed text-ink">
           {alert.reason}
@@ -163,8 +171,8 @@ export default async function AlertDetailPage({
                 {alert.actions.map((a) => (
                   <li key={a.id} className="px-4 py-2 text-sm">
                     <div className="text-ink">
-                      {a.fromState ? `${a.fromState} → ` : ""}
-                      {a.toState.replace(/_/g, " ").toLowerCase()}
+                      {a.fromState ? `${ALERT_STATE_LABELS[a.fromState]} → ` : ""}
+                      {ALERT_STATE_LABELS[a.toState]}
                     </div>
                     <div className="text-2xs text-slate">
                       {a.byUser.name} · {formatDate(a.at)}
@@ -176,12 +184,22 @@ export default async function AlertDetailPage({
                 ))}
               </ul>
             )}
-            <p className="border-t border-line px-4 py-2 text-2xs text-slate">
-              {canActOnAlerts(user.role)
-                ? "Acknowledge, seek clarification, mark as explained and escalate arrive in Phase 5, each recorded against your name."
-                : "Your role has read access to this alert. Action on oversight alerts rests with the district, state and ministry authorities."}
-            </p>
+            {!canAct(user.role) ? (
+              <p className="border-t border-line px-4 py-2 text-2xs text-slate">
+                Your role has read access to this alert. Action on oversight
+                alerts rests with the district, state and ministry authorities.
+              </p>
+            ) : null}
           </Card>
+
+          {canAct(user.role) ? (
+            <ReviewPanel
+              alertId={alert.id}
+              state={alert.state}
+              actions={availableActions(alert.state)}
+              escalationTarget={escalatesTo(user.role)}
+            />
+          ) : null}
         </div>
 
         <EvidencePanels evidence={evidence} />

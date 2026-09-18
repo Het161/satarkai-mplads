@@ -53,7 +53,7 @@ Reference portal: <https://mplads.mospi.gov.in/digigov/dashboard.html>
 | **2** | Eight rule detectors, alert generation with reason + evidence, alert queue | **Done** |
 | **3** | FastAPI ML service — IsolationForest score + delay-risk, explainable, rules-only fallback, eval script | **Done** |
 | **4** | Four role dashboards + single-work drill-down timeline | **Done** |
-| 5 | Review workflow, audit trail, notifications, CSV/PDF export | Not started |
+| **5** | Review workflow, audit trail, notifications, CSV/PDF export | **Done** |
 | 6 | i18n (EN/HI), responsiveness, empty/loading/error states, documentation | Not started |
 
 ---
@@ -113,6 +113,7 @@ state code (`gj`, `mh`, `up`, `tn`, `wb`, `as`).
 | `npm run eval` | Score the detectors against the planted ground truth |
 | `npm run ml:setup` / `ml:serve` / `ml:test` | The Python model service |
 | `npm run check:baseline` | Verify the seed's clean baseline (see below) |
+| `npm run tune` | Read the reviewer feedback loop back (see below) |
 | `npm test` | RBAC isolation tests against the seeded database |
 | `npm run typecheck` / `lint` | `tsc --noEmit` / `next lint` |
 
@@ -144,7 +145,7 @@ Two properties make this hold up:
 A cross-jurisdiction drill-down is **not found**, not refused — the id and the
 scope sit in the same `WHERE`, so the page cannot confirm the record exists.
 
-`npm test` proves all of it against the real seeded database: 64 tests in total,
+`npm test` proves all of it against the real seeded database: 79 tests in total,
 covering each role's isolation, cross-jurisdiction drill-down, the
 deny-by-default path for anchorless and unknown roles, the detector scoring
 maths, the recall and precision claims above, and the ML layer's two guarantees
@@ -403,6 +404,111 @@ A few decisions worth naming, each of which started as a mistake in this build:
   districts by overdue count — a bar chart of 1, 1, 1, 1, 2 sitting directly
   above a table with the same column. It now names the overdue works instead,
   which is what an SNA would actually want.
+
+## The review workflow
+
+Four things an officer can do with an alert, and **nothing the system does on
+its own**:
+
+| Action | What it commits the officer to | Note |
+|---|---|---|
+| **Acknowledge** | Seen, and being looked into. Stays open in the queue. | optional |
+| **Seek clarification** | Asked the agency or district for an explanation. | required |
+| **Mark as explained** | There is a legitimate reason; no further action needed. | required |
+| **Escalate** | Warrants attention above this level. | required |
+
+Three of the four require a note of at least 15 characters, because a trail of
+state changes with no reasons attached is not an audit trail. The panel shows
+what an action *means* before the officer commits to it — "mark as explained" is
+a decision somebody will read in a year.
+
+**Nothing is ever erased.** There is no transition back to "awaiting review": a
+decision is answered by recording another, not by removing the old one. A closed
+case can be reopened — new information arrives — and the reopening is itself
+recorded.
+
+**Nothing closes itself.** The detection engine refreshes an alert's score and
+evidence when it re-runs, but never its review state, so an alert somebody
+marked as explained does not quietly reopen and one nobody has looked at never
+quietly closes.
+
+**MPs and implementing agencies cannot act.** They read their own data. An
+agency marking its own missing-evidence alert as "explained" would make the
+whole trail worthless.
+
+Every guard is enforced in the server action, not by hiding a button: the role,
+the jurisdiction (the same `scoped()` filter as every read), the legality of the
+transition, and the note. Proved by forging the hidden `alertId` in a live
+browser to point at another district's alert — the server refused it and the
+foreign alert stayed untouched.
+
+### The audit trail
+
+[`/audit`](src/app/(portal)/audit/page.tsx) lists every decision, newest first,
+filtered by the same jurisdiction scope as everything else. So a state authority
+sees its districts' decisions and the Ministry sees all of them, while a district
+officer sees only their own — visible upward by construction, with no
+cross-jurisdiction leakage. The state change, the action record and the audit
+entry are written in one transaction: a state cannot change without the entry
+that explains it.
+
+### The feedback loop, made concrete
+
+Every alert an officer *concludes* writes a `DetectorOutcome`: the detector, the
+score it carried, how long the decision took, and what was decided.
+`npm run tune` reads that table back and asks the question a tuning pass
+actually needs — at what score did each rule start being explained away?
+
+It deliberately **changes nothing**. A detector that retunes itself from reviewer
+behaviour learns to stop reporting whatever is inconvenient, and nobody is
+accountable for the change. The script prints a recommendation; a person edits
+`THRESHOLDS` in `src/lib/scheme.ts`, and that edit sits in the git history with
+their name on it.
+
+## Notifications
+
+A channel-agnostic adapter. Escalation is the only action that reaches upward —
+that is the point of escalating — so it notifies the state authority and the
+Ministry; other actions notify the district whose work it is.
+
+| Channel | Status |
+|---|---|
+| **In-app** | Delivered. No configuration, no network, so there is always one channel that actually works. |
+| **Email** | `NOTIFY_MODE=console` (the default) prints instead of sending. A real deployment wires its department's SMTP relay in. |
+| **SMS, IVR** | Deliberate stubs. A district officer in the field is likelier to read an SMS than an email, so the shape is there and the intent is recorded — but nothing pretends to send. |
+
+Two rules shape the adapter. **Notifying never blocks the work**: delivery is
+attempted after the decision is already recorded, and a failure is written to the
+notification row rather than thrown, so an officer never sees an error because a
+mail server is down. And **a channel that cannot deliver says so** — every intent
+is persisted, including the ones that go nowhere, with the reason, and
+[`/notifications`](src/app/(portal)/notifications/page.tsx) shows it. A
+monitoring platform that silently fails to notify is worse than one that does
+not notify at all, because nobody knows.
+
+## Exports
+
+| Export | What it is |
+|---|---|
+| `/api/export/alerts.csv` | The alert queue, honouring the same filters as the page, with each alert's reason and the officer's note |
+| `/api/export/works.csv` | The works register — the whole lifecycle per row, for reconciling against a district's own records offline |
+| `/api/export/alert/[id]` | One alert as a PDF case note: the reason, the rule, the evidence, the scoring and the full review trail |
+
+All three are scope-filtered exactly like the pages they mirror — an export route
+is the classic place a jurisdiction filter gets forgotten, because it does not
+look like a page and nobody screenshots it. Verified: a district officer's alert
+export returns 1 row where the Ministry's returns 180, an unauthenticated request
+returns 401, and a PDF for another district's alert returns 404.
+
+The CSV carries a UTF-8 BOM so Excel does not mangle every rupee sign and place
+name, and quotes per RFC 4180 so a note containing a comma does not corrupt the
+file. The PDF renders amounts as "Rs." rather than ₹, because pdfkit's built-in
+fonts have no U+20B9 and the glyph would silently come out as garbage — the
+substitution is stated on the document itself rather than left to be noticed.
+
+Both the PDF and the platform say, twice, that a signal is a prompt for review
+and not a finding. A page that leaves an office without that line on it is
+exactly the page that gets misread as an accusation.
 
 ## Design
 

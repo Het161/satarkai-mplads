@@ -9,6 +9,7 @@ import { prisma } from "@/lib/db";
 import { formatDate, formatINR, formatNumber } from "@/lib/format";
 import { scoped } from "@/lib/scope";
 import { ALERT_TYPE_LABELS } from "@/lib/scheme";
+import { ALERT_STATE_LABELS } from "@/lib/review";
 
 export const metadata: Metadata = { title: "Alert queue" };
 export const dynamic = "force-dynamic";
@@ -132,7 +133,15 @@ export default async function AlertsPage({
             it broke and the records behind it.
           </p>
         </div>
-        <Tag>Page {page} of {pages}</Tag>
+        <div className="flex items-center gap-2">
+          <a
+            href={`/api/export/alerts.csv${searchParams.state || searchParams.type ? `?${new URLSearchParams(Object.entries(searchParams).filter(([k, v]) => v && k !== "page") as [string, string][]).toString()}` : ""}`}
+            className="rounded border border-line bg-white px-2.5 py-1 text-2xs font-medium text-navy hover:bg-paper"
+          >
+            Export this queue (CSV)
+          </a>
+          <Tag>Page {page} of {pages}</Tag>
+        </div>
       </div>
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -198,7 +207,7 @@ export default async function AlertsPage({
             {STATES.map((s) => (
               <Filter
                 key={s}
-                label={s.replace(/_/g, " ").toLowerCase()}
+                label={ALERT_STATE_LABELS[s]}
                 param="state"
                 value={s}
                 current={searchParams.state}
@@ -238,9 +247,7 @@ export default async function AlertsPage({
                     {ALERT_TYPE_LABELS[a.type]}
                   </Link>
                   <span className="text-sm text-ink">· {a.work.title}</span>
-                  {a.state !== "OPEN" ? (
-                    <Tag>{a.state.replace(/_/g, " ").toLowerCase()}</Tag>
-                  ) : null}
+                  {a.state !== "OPEN" ? <Tag>{ALERT_STATE_LABELS[a.state]}</Tag> : null}
                 </div>
 
                 <p className="mt-1 max-w-4xl text-2xs leading-relaxed text-slate">

@@ -20,7 +20,8 @@
     "detect:ml": "ML_MODE=ml tsx -r dotenv/config scripts/run-detectors.ts dotenv_config_path=.env",
     "ml:serve": "ml/.venv/bin/uvicorn app.main:app --app-dir ml --host 127.0.0.1 --port 8000",
     "ml:setup": "uv venv ml/.venv --python $(which python3.13) && uv pip install --python ml/.venv/bin/python -r ml/requirements.txt",
-    "ml:test": "ml/.venv/bin/python -m pytest ml/tests -q"
+    "ml:test": "ml/.venv/bin/python -m pytest ml/tests -q",
+    "tune": "tsx -r dotenv/config scripts/tune-thresholds.ts dotenv_config_path=.env"
   },
   "dependencies": {
     "@fontsource-variable/inter": "^5.3.0",
@@ -30,6 +31,7 @@
     "clsx": "^2.1.1",
     "jose": "^6.2.12",
     "next": "14.2.15",
+    "pdfkit": "^0.20.2",
     "prisma": "^5.22.0",
     "react": "^18",
     "react-dom": "^18",
@@ -38,6 +40,7 @@
   },
   "devDependencies": {
     "@types/node": "^20",
+    "@types/pdfkit": "^0.17.6",
     "@types/react": "^18",
     "@types/react-dom": "^18",
     "dotenv": "^18.0.0",
