@@ -1,4 +1,19 @@
 /** @type {import('next').NextConfig} */
-const nextConfig = {};
+const nextConfig = {
+  /**
+   * pdfkit reads its font metrics (.afm) from disk at render time, building the
+   * path at runtime rather than `require`-ing the files. Next's dependency
+   * tracer only follows static requires, so on a serverless deploy those files
+   * are left out of the bundle and the first PDF export dies on
+   * `ENOENT .../data/Helvetica.afm` — locally it works fine, because the whole
+   * node_modules tree is sitting there.
+   *
+   * Naming them here puts them in the function bundle. Scoped to the one route
+   * that draws a PDF, so nothing else carries the weight.
+   */
+  outputFileTracingIncludes: {
+    "/api/export/alert/[id]": ["./node_modules/pdfkit/js/data/**"],
+  },
+};
 
 export default nextConfig;
