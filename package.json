@@ -1,0 +1,49 @@
+{
+  "name": "satarkai",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "db:push": "prisma db push",
+    "db:generate": "prisma generate",
+    "db:studio": "prisma studio",
+    "db:seed": "tsx -r dotenv/config prisma/seed.ts dotenv_config_path=.env",
+    "db:reset": "prisma db push --force-reset && npm run db:seed",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "check:baseline": "tsx -r dotenv/config scripts/check-baseline.ts dotenv_config_path=.env"
+  },
+  "dependencies": {
+    "@fontsource-variable/inter": "^5.3.0",
+    "@prisma/client": "^5.22.0",
+    "@tanstack/react-query": "^5.103.1",
+    "bcryptjs": "^3.0.3",
+    "clsx": "^2.1.1",
+    "jose": "^6.2.12",
+    "next": "14.2.15",
+    "prisma": "^5.22.0",
+    "react": "^18",
+    "react-dom": "^18",
+    "recharts": "^3.10.1",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "@types/react": "^18",
+    "@types/react-dom": "^18",
+    "dotenv": "^18.0.0",
+    "eslint": "^8",
+    "eslint-config-next": "14.2.15",
+    "postcss": "^8",
+    "tailwindcss": "^3.4.1",
+    "tsx": "^4.23.13",
+    "typescript": "^5",
+    "vitest": "^4.1.11"
+  },
+  "prisma": {
+    "seed": "tsx prisma/seed.ts"
+  }
+}

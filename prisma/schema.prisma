@@ -1,0 +1,317 @@
+// SatarkAI — MPLADS AI anomaly & oversight platform
+// Data model mirrors the real eSAKSHI workflow:
+//   entitlement -> MP recommendation -> district sanction -> IA execution
+//   -> staged vendor payments (+ asset evidence) -> IA marks work complete
+// See docs/SCHEME.md for the citation behind every field that a detector reads.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  MINISTRY // Central Nodal Agency (MoSPI) — national scope
+  SNA // State Nodal Authority — one state
+  DISTRICT // District Authority (NDA/IDA) — one district
+  MP // Hon'ble Member of Parliament — own recommended works
+  IA // Implementing Agency — own assigned works
+}
+
+enum House {
+  LS // Lok Sabha
+  RS // Rajya Sabha
+}
+
+enum WorkStatus {
+  RECOMMENDED // MP has recommended and earmarked funds
+  SANCTIONED // District Authority sanctioned; IA designated
+  IN_PROGRESS // IA executing; staged vendor payments flowing
+  COMPLETED_UNMARKED // physically complete, IA has NOT marked completion
+  COMPLETED // IA marked complete — only these show as completed publicly
+  CANCELLED
+}
+
+enum AlertType {
+  OVERDUE // > 365 days since sanction, not marked complete
+  PAYMENT_AHEAD // payments released far ahead of recorded progress
+  COST_OVERRUN // expenditure exceeds sanctioned amount
+  ENTITLEMENT_BREACH // MP recommendations exceed annual entitlement
+  MISSING_EVIDENCE // payment stage released without photo/document
+  STUCK_UNMARKED // complete on the ground, never marked complete
+  DUPLICATE // near-duplicate work, same district, overlapping period
+  FY_END_SPIKE // abnormal clustering of sanctions/payments at FY end
+  COST_OUTLIER // cost per unit far from district/state peers (ML)
+  IA_CONCENTRATION // one IA/vendor holds a disproportionate share (ML)
+  ML_ANOMALY // multivariate IsolationForest anomaly score (ML)
+}
+
+enum Severity {
+  CRITICAL
+  HIGH
+  MEDIUM
+  LOW
+  INFO
+}
+
+enum AlertState {
+  OPEN
+  ACKNOWLEDGED
+  CLARIFICATION_SOUGHT
+  EXPLAINED
+  ESCALATED
+}
+
+enum EvidenceKind {
+  PHOTO
+  DOC
+}
+
+enum DataSourceKind {
+  REAL
+  SYNTHETIC
+}
+
+model State {
+  id        String     @id @default(cuid())
+  name      String     @unique
+  code      String     @unique // census/ISO-style short code, e.g. GJ
+  districts District[]
+  mps       MP[]
+  users     User[]
+}
+
+model District {
+  id      String @id @default(cuid())
+  stateId String
+  state   State  @relation(fields: [stateId], references: [id])
+  name    String
+  code    String @unique
+
+  works    Work[]
+  agencies ImplementingAgency[]
+  users    User[]
+
+  @@unique([stateId, name])
+  @@index([stateId])
+}
+
+model MP {
+  id           String    @id @default(cuid())
+  name         String
+  house        House
+  constituency String
+  stateId      String
+  state        State     @relation(fields: [stateId], references: [id])
+  termStart    DateTime
+  termEnd      DateTime?
+
+  entitlements Entitlement[]
+  works        Work[]
+  users        User[]
+
+  @@index([stateId])
+}
+
+model Entitlement {
+  id              String @id @default(cuid())
+  mpId            String
+  mp              MP     @relation(fields: [mpId], references: [id])
+  financialYear   String // "2024-25"
+  amountAuthorised Decimal @db.Decimal(14, 2) // annual entitlement authorised online
+  releasedAmount  Decimal @db.Decimal(14, 2) // actually released to districts
+
+  @@unique([mpId, financialYear])
+}
+
+model ImplementingAgency {
+  id         String   @id @default(cuid())
+  name       String
+  districtId String
+  district   District @relation(fields: [districtId], references: [id])
+  type       String // PWD / Municipal Corporation / Panchayat / PSU / NGO
+
+  works Work[]
+  users User[]
+
+  @@index([districtId])
+}
+
+model Work {
+  id       String @id @default(cuid())
+  workCode String @unique // eSAKSHI-style work reference
+
+  mpId       String
+  mp         MP     @relation(fields: [mpId], references: [id])
+  districtId String
+  district   District @relation(fields: [districtId], references: [id])
+  iaId       String?
+  ia         ImplementingAgency? @relation(fields: [iaId], references: [id])
+
+  title       String
+  description String
+  workType    String // "Community Hall", "Borewell", ... — peer group for cost outliers
+  category    String // Drinking Water / Education / Health / Roads / ...
+
+  // 1. MP recommends and earmarks funds from the entitlement
+  recommendedAt     DateTime
+  recommendedAmount Decimal  @db.Decimal(14, 2)
+  financialYear     String
+
+  // 2. District Authority sanctions; scheme rule = complete within 1 year of sanction
+  sanctionedAt        DateTime?
+  sanctionedAmount    Decimal?  @db.Decimal(14, 2)
+  expectedCompletionAt DateTime? // sanctionedAt + 365 days
+
+  // 3. Execution
+  status           WorkStatus @default(RECOMMENDED)
+  progressPct      Int        @default(0)
+  completedAt      DateTime? // physically finished on the ground
+  markedCompleteAt DateTime? // IA marked it complete on the portal
+
+  unitCount Int?     @default(1) // for cost-per-unit peer comparison
+  lat       Float?
+  lng       Float?
+  createdAt DateTime @default(now())
+
+  payments  Payment[]
+  evidence  Evidence[]
+  alerts    Alert[]
+  planted   PlantedAnomaly[]
+
+  @@index([districtId, status])
+  @@index([mpId])
+  @@index([iaId])
+  @@index([workType])
+}
+
+model Payment {
+  id         String   @id @default(cuid())
+  workId     String
+  work       Work     @relation(fields: [workId], references: [id], onDelete: Cascade)
+  stageNo    Int // payment stage per the sanction order
+  amount     Decimal  @db.Decimal(14, 2)
+  releasedAt DateTime
+  vendorName String?
+  voucherRef String?
+
+  evidence Evidence[]
+
+  @@unique([workId, stageNo])
+  @@index([workId])
+}
+
+model Evidence {
+  id         String       @id @default(cuid())
+  workId     String
+  work       Work         @relation(fields: [workId], references: [id], onDelete: Cascade)
+  paymentId  String?
+  payment    Payment?     @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  kind       EvidenceKind
+  url        String
+  uploadedAt DateTime
+  stageNo    Int
+
+  @@index([workId])
+}
+
+model Alert {
+  id           String     @id @default(cuid())
+  workId       String
+  work         Work       @relation(fields: [workId], references: [id], onDelete: Cascade)
+  type         AlertType
+  severity     Severity
+  score        Int // Anomaly-Priority Score, 0-100
+  reason       String // plain-language explanation shown to the officer
+  evidenceJson Json // the exact rows/figures the detector relied on
+  state        AlertState @default(OPEN)
+  detectedAt   DateTime   @default(now())
+
+  actions AlertAction[]
+
+  @@unique([workId, type])
+  @@index([workId])
+  @@index([state, score])
+}
+
+model AlertAction {
+  id        String      @id @default(cuid())
+  alertId   String
+  alert     Alert       @relation(fields: [alertId], references: [id], onDelete: Cascade)
+  fromState AlertState?
+  toState   AlertState
+  note      String?
+  byUserId  String
+  byUser    User        @relation(fields: [byUserId], references: [id])
+  at        DateTime    @default(now())
+
+  @@index([alertId])
+}
+
+model User {
+  id           String  @id @default(cuid())
+  name         String
+  email        String  @unique
+  passwordHash String
+  role         Role
+
+  // Jurisdiction anchors — scopeFor() turns these into a server-side query filter.
+  stateId    String?
+  state      State?              @relation(fields: [stateId], references: [id])
+  districtId String?
+  district   District?           @relation(fields: [districtId], references: [id])
+  mpId       String?
+  mp         MP?                 @relation(fields: [mpId], references: [id])
+  iaId       String?
+  ia         ImplementingAgency? @relation(fields: [iaId], references: [id])
+
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  alertActions AlertAction[]
+  auditLogs    AuditLog[]
+}
+
+model AuditLog {
+  id       String   @id @default(cuid())
+  userId   String
+  user     User     @relation(fields: [userId], references: [id])
+  action   String
+  entity   String
+  entityId String
+  meta     Json?
+  at       DateTime @default(now())
+
+  @@index([entity, entityId])
+  @@index([userId])
+}
+
+model DataSource {
+  id        String         @id @default(cuid())
+  name      String         @unique
+  sourceUrl String?
+  kind      DataSourceKind
+  fetchedAt DateTime
+  note      String
+
+  // Honest coverage labelling — eSAKSHI holds data from 1 April 2023 onward.
+  coverageFrom DateTime?
+  coverageNote String?
+}
+
+/// Ground truth for the planted anomalies in the synthetic seed.
+/// Phase 3's eval script scores detector precision/recall against this table.
+/// It exists only because the dataset is synthetic; a real feed has no labels.
+model PlantedAnomaly {
+  id     String    @id @default(cuid())
+  workId String
+  work   Work      @relation(fields: [workId], references: [id], onDelete: Cascade)
+  type   AlertType
+  note   String
+
+  @@unique([workId, type])
+  @@index([type])
+}
