@@ -16,7 +16,11 @@
     "test": "vitest run",
     "check:baseline": "tsx -r dotenv/config scripts/check-baseline.ts dotenv_config_path=.env",
     "detect": "tsx -r dotenv/config scripts/run-detectors.ts dotenv_config_path=.env",
-    "eval": "tsx -r dotenv/config scripts/eval-detectors.ts dotenv_config_path=.env"
+    "eval": "tsx -r dotenv/config scripts/eval-detectors.ts dotenv_config_path=.env",
+    "detect:ml": "ML_MODE=ml tsx -r dotenv/config scripts/run-detectors.ts dotenv_config_path=.env",
+    "ml:serve": "ml/.venv/bin/uvicorn app.main:app --app-dir ml --host 127.0.0.1 --port 8000",
+    "ml:setup": "uv venv ml/.venv --python $(which python3.13) && uv pip install --python ml/.venv/bin/python -r ml/requirements.txt",
+    "ml:test": "ml/.venv/bin/python -m pytest ml/tests -q"
   },
   "dependencies": {
     "@fontsource-variable/inter": "^5.3.0",

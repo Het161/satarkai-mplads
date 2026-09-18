@@ -533,14 +533,59 @@ function advanceLifecycle(
   const age = daysBetween(sanctionedAt, NOW);
   if (age < 20) return; // sanctioned, work not yet started
 
-  // Progress: baseline works finish inside the 365-day window.
-  const durationPlanned = int(120, 330);
-  const progress = Math.min(100, Math.round((age / durationPlanned) * 100));
+  // How long the work actually takes.
+  //
+  // This is deliberately *structured* rather than random. Real execution time
+  // is not a coin toss: some agencies are chronically slower than others, big
+  // works take longer than small ones, and a sanction issued into the monsoon
+  // loses working weeks before it starts. An earlier version of this seed drew
+  // duration uniformly, and the delay-risk model correctly reported that there
+  // was nothing to learn — an AUC of 0.59, barely better than guessing.
+  //
+  // Encoding the relationships that genuinely drive delay gives the model
+  // something real to find. It also means the model's accuracy describes how
+  // well it recovers THESE relationships, not how well it would predict real
+  // MPLADS delay — which the README says plainly.
+  //
+  // Works may now overrun the one-year window and still be completed and
+  // marked. That does not disturb the clean baseline: the overdue rule is
+  // about works left *unmarked*, not works that took a while.
+  const reliability = agencyReliability(w.agencyIndex!);
+  const complexity =
+    WORK_TYPES.find((t) => t.type === w.workType)?.complexity ?? 1;
+  // Bigger works take longer, scaled across the ₹3 lakh to ₹9 crore range the
+  // scheme actually spans rather than across all of log space.
+  const sizeFactor =
+    0.85 + 0.5 * Math.min(1, Math.max(0, (Math.log10(w.sanctionedAmount!) - 5.3) / 1.7));
+  const monsoonMonth = sanctionedAt.getUTCMonth() >= 5 && sanctionedAt.getUTCMonth() <= 8;
+  const seasonFactor = monsoonMonth ? 1.22 : 1.0;
+
+  const durationPlanned = Math.round(
+    int(110, 260) * reliability * complexity * sizeFactor * seasonFactor,
+  );
+  let duration = durationPlanned;
+  let progress = Math.min(100, Math.round((age / duration) * 100));
+
+  // A work still running past the one-year mark genuinely breaches the rule,
+  // and the overdue detector is right to flag it — but nothing planted it, so
+  // it would register as a false positive and make the precision figure
+  // unreadable. The baseline therefore brings such works to completion. They
+  // still took longer than a year, which is what the delay model learns from;
+  // they are simply not left hanging.
+  //
+  // The limitation this leaves is stated in the README: the synthetic baseline
+  // contains no naturally-overdue *running* works, so the overdue detector's
+  // precision is measured against planted cases only.
+  if (progress < 100 && age > 365) {
+    duration = Math.max(200, age - int(10, 90));
+    progress = 100;
+  }
+
   w.progressPct = progress;
   w.status = progress >= 100 ? "COMPLETED" : "IN_PROGRESS";
 
   if (w.status === "COMPLETED") {
-    w.completedAt = addDays(sanctionedAt, durationPlanned);
+    w.completedAt = addDays(sanctionedAt, duration);
     // Baseline: the IA marks completion promptly (days, not months).
     w.markedCompleteAt = addDays(w.completedAt, int(3, 25));
   }
@@ -699,9 +744,16 @@ function plantAnomalies(
   // 4. ENTITLEMENT_BREACH — one MP's recommendations for a year pushed past
   //    the ₹5 crore annual entitlement. Planted by inflating a few large works.
   {
-    const breachMps = [2, 9, 17, 24];
+    // A wider candidate list than we need: years that cannot be pushed over
+    // the limit gently are skipped, so several candidates may not be usable.
+    const breachMps = [2, 5, 9, 12, 14, 17, 20, 21, 24, 26, 28, 31, 33];
+    /** Beyond this, "spreading the excess" stops being realistic and starts
+     *  producing works priced many times their peers — which would plant a
+     *  cost outlier under an entitlement-breach label. */
+    const MAX_SCALE = 1.8;
     let n = 0;
     for (const mpIndex of breachMps) {
+      if (n >= 5) break;
       const fy = "2025-26";
       // Cancelled recommendations release their earmarked funds, so they do
       // not count towards the year's commitment — and the detector is right to
@@ -714,15 +766,32 @@ function plantAnomalies(
           w.status !== "CANCELLED" &&
           !used.has(w.workCode),
       );
-      if (theirs.length < 2) continue;
+      // Enough works for the year to read as an accumulation rather than one
+      // outsized recommendation.
+      if (theirs.length < 4) continue;
       const total = theirs.reduce((s, w) => s + w.recommendedAmount, 0);
-      const excess = ANNUAL_ENTITLEMENT * 1.14 - total;
+      const excess = ANNUAL_ENTITLEMENT * 1.09 - total;
       if (excess <= 0) continue;
+
+      const scaleNeeded = (total + excess) / total;
+      if (scaleNeeded > MAX_SCALE) continue;
+
+      // Spread the excess across the year's recommendations rather than
+      // loading it onto one work. An entitlement breach is a year adding up to
+      // too much, not a single absurd recommendation — and inflating one work
+      // would also turn it into a cost outlier, so the ground truth would then
+      // claim two different things about the same record.
+      const scale = scaleNeeded;
+      for (const t of theirs) {
+        t.recommendedAmount = round(t.recommendedAmount * scale, 1000);
+        if (t.sanctionedAmount) {
+          t.sanctionedAmount = round(t.sanctionedAmount * scale, 1000);
+          for (const pay of t.payments) pay.amount = round(pay.amount * scale, 1000);
+        }
+      }
 
       const w = theirs[theirs.length - 1];
       used.add(w.workCode);
-      w.recommendedAmount = round(w.recommendedAmount + excess, 1000);
-      if (w.sanctionedAmount) w.sanctionedAmount = round(w.recommendedAmount * 0.96, 1000);
       w.planted.push(
         note("ENTITLEMENT_BREACH", `Recommendations by ${mps[mpIndex].name} for FY ${fy} total about ₹${Math.round((total + excess) / 1e7)} crore against an annual entitlement of ₹5 crore.`),
       );
@@ -888,7 +957,11 @@ function plantAnomalies(
   {
     const chosen = take((w) => !!w.sanctionedAmount && w.unitCount >= 1, 14);
     for (const w of chosen) {
-      const factor = 2.4 + rnd() * 1.8;
+      // Work types have a naturally wide price band, so a 2.4x work is not
+      // reliably an outlier against its own category's spread. Plant clearly
+      // outside it, or the ground truth is asserting something the data does
+      // not actually show.
+      const factor = 4.0 + rnd() * 3.0;
       w.recommendedAmount = round(w.recommendedAmount * factor, 1000);
       w.sanctionedAmount = round(w.sanctionedAmount! * factor, 1000);
       for (const p of w.payments) p.amount = round(p.amount * factor, 1000);
@@ -898,6 +971,78 @@ function plantAnomalies(
       );
     }
     tally("COST_OUTLIER", chosen.length);
+  }
+
+  // 11. ML_ANOMALY — odd in combination, innocent on every single rule.
+  //
+  //     This is the case the model layer exists for, and without it the model
+  //     has nothing to demonstrate: on a baseline built to be clean, an
+  //     IsolationForest can only rediscover what the rules already found.
+  //
+  //     Each of these works is deliberately placed *just inside* every
+  //     threshold — costly but under the outlier multiple, slow but inside the
+  //     year, paid ahead but under the payment gap, sanctioned near the
+  //     year-end but outside the clustering window, on a lumpy schedule that no
+  //     rule examines at all. Nothing fires. Taken together the combination is
+  //     plainly unusual, and that pattern — everything comfortably under every
+  //     limit — is what deliberate gaming actually looks like.
+  {
+    // Restricted to the most recent full year. Moving an older work's
+    // sanction date next to its year-end would leave it running well past the
+    // one-year mark, which the overdue rule would rightly flag — and then the
+    // work would no longer be the "breaks no single rule" case it is meant to
+    // demonstrate.
+    const chosen = take(
+      (w) =>
+        !!w.sanctionedAt &&
+        !!w.sanctionedAmount &&
+        w.payments.length >= 3 &&
+        w.financialYear === "2025-26" &&
+        w.status !== "CANCELLED",
+      12,
+    );
+
+    for (const w of chosen) {
+      // Costly, but below the 2.5x multiple the outlier test requires.
+      const inflate = 1.7 + rnd() * 0.5;
+      w.recommendedAmount = round(w.recommendedAmount * inflate, 1000);
+      w.sanctionedAmount = round(w.sanctionedAmount! * inflate, 1000);
+
+      // Paid ahead of progress, but inside the 25-point gap the rule allows.
+      w.progressPct = int(45, 60);
+      const targetShare = w.progressPct / 100 + 0.20;
+      redistribute(w, round(w.sanctionedAmount * targetShare, 1000));
+      w.status = "IN_PROGRESS";
+      w.completedAt = null;
+      w.markedCompleteAt = null;
+
+      // A markedly lumpy payment schedule — one stage carrying most of the
+      // money. No rule looks at the shape of a payment schedule at all.
+      if (w.payments.length >= 3) {
+        const total = w.payments.reduce((sum, p) => sum + p.amount, 0);
+        const small = round(total * 0.06, 1000);
+        w.payments.forEach((p, i) => {
+          p.amount = i === 0 ? total - small * (w.payments.length - 1) : small;
+        });
+      }
+
+      // Sanctioned close to the year end, but outside the clustering window.
+      const close = fyEnd(w.financialYear);
+      const shifted = addDays(close, -int(26, 45));
+      if (shifted > w.recommendedAt && shifted < NOW) {
+        const delta = daysBetween(w.sanctionedAt!, shifted);
+        w.sanctionedAt = shifted;
+        for (const p of w.payments) {
+          p.releasedAt = clampToNow(addDays(p.releasedAt, delta));
+          for (const e of p.evidence) e.uploadedAt = clampToNow(addDays(e.uploadedAt, delta));
+        }
+      }
+
+      w.planted.push(
+        note("ML_ANOMALY", `Unusual in combination while breaking no single rule: sanctioned at roughly ${inflate.toFixed(1)}x comparable works, ${Math.round(targetShare * 100)}% released against ${w.progressPct}% progress, one payment stage carrying most of the money, and a sanction date just outside the year-end window.`),
+      );
+    }
+    tally("ML_ANOMALY", chosen.length);
   }
 
   // 10. IA_CONCENTRATION — one implementing agency taking a dominant share of
@@ -929,6 +1074,21 @@ function plantAnomalies(
 }
 
 const clampToNow = (d: Date) => (d > NOW ? NOW : d);
+
+/**
+ * A latent per-agency reliability factor: how much longer than a baseline
+ * schedule this agency's works tend to take. Derived from the agency index so
+ * it is stable across runs, and spread widely enough that the difference
+ * between a dependable agency and a struggling one is real.
+ *
+ * Nothing in the data records this directly — which is the point. The
+ * delay-risk model has to infer an agency's reliability from its track record,
+ * exactly as a district officer would.
+ */
+function agencyReliability(agencyIndex: number): number {
+  const spread = ((agencyIndex * 2654435761) % 1000) / 1000; // deterministic 0-1
+  return 0.8 + spread * 0.85; // 0.80 (quick) to 1.65 (chronically slow)
+}
 
 /**
  * Planting moves sanction dates and completion dates around, which can leave a

@@ -226,6 +226,13 @@ export const FICTIONAL_VENDORS = [
  * Work types with realistic MPLADS cost bands (rupees) and a unit basis for
  * cost-per-unit peer comparison. Bands are drawn from the kinds of durable
  * community assets the scheme funds.
+ *
+ * `complexity` scales how long a work of this type takes to execute. A borewell
+ * is drilled in weeks; a health sub-centre needs foundations, services and
+ * inspections. Encoding it here gives the delay-risk model a genuine, learnable
+ * relationship — without it the model has only agency track records to go on,
+ * and with three agencies per district there is rarely enough history for that
+ * to mean anything.
  */
 export const WORK_TYPES: {
   type: string;
@@ -234,22 +241,23 @@ export const WORK_TYPES: {
   max: number;
   unit: string;
   multiUnit: boolean;
+  complexity: number;
 }[] = [
-  { type: "Community Hall", category: "Community Assets", min: 2_500_000, max: 8_000_000, unit: "hall", multiUnit: false },
-  { type: "Borewell with Handpump", category: "Drinking Water", min: 300_000, max: 1_200_000, unit: "borewell", multiUnit: true },
-  { type: "Anganwadi Centre Building", category: "Women & Child", min: 1_200_000, max: 3_500_000, unit: "centre", multiUnit: false },
-  { type: "School Classroom Block", category: "Education", min: 2_000_000, max: 6_000_000, unit: "classroom", multiUnit: true },
-  { type: "Cement Concrete Road", category: "Roads & Connectivity", min: 1_500_000, max: 7_000_000, unit: "km", multiUnit: true },
-  { type: "Solar Street Lighting", category: "Energy", min: 500_000, max: 2_500_000, unit: "pole", multiUnit: true },
-  { type: "Primary Health Sub-Centre", category: "Health", min: 3_000_000, max: 9_000_000, unit: "centre", multiUnit: false },
-  { type: "Public Library Building", category: "Education", min: 2_000_000, max: 5_000_000, unit: "library", multiUnit: false },
-  { type: "Covered Drainage Line", category: "Sanitation", min: 1_000_000, max: 4_500_000, unit: "km", multiUnit: true },
-  { type: "Crematorium Shed", category: "Community Assets", min: 800_000, max: 2_500_000, unit: "shed", multiUnit: false },
-  { type: "Bus Passenger Shelter", category: "Roads & Connectivity", min: 300_000, max: 900_000, unit: "shelter", multiUnit: true },
-  { type: "RO Drinking Water Plant", category: "Drinking Water", min: 800_000, max: 3_000_000, unit: "plant", multiUnit: false },
-  { type: "Sports Ground Development", category: "Sports & Youth", min: 1_500_000, max: 5_500_000, unit: "ground", multiUnit: false },
-  { type: "Public Toilet Block", category: "Sanitation", min: 500_000, max: 1_800_000, unit: "block", multiUnit: true },
-  { type: "Village Pond Renovation", category: "Water Conservation", min: 700_000, max: 2_800_000, unit: "pond", multiUnit: false },
+  { type: "Community Hall", category: "Community Assets", min: 2_500_000, max: 8_000_000, unit: "hall", multiUnit: false, complexity: 1.35 },
+  { type: "Borewell with Handpump", category: "Drinking Water", min: 300_000, max: 1_200_000, unit: "borewell", multiUnit: true, complexity: 0.72 },
+  { type: "Anganwadi Centre Building", category: "Women & Child", min: 1_200_000, max: 3_500_000, unit: "centre", multiUnit: false, complexity: 1.15 },
+  { type: "School Classroom Block", category: "Education", min: 2_000_000, max: 6_000_000, unit: "classroom", multiUnit: true, complexity: 1.2 },
+  { type: "Cement Concrete Road", category: "Roads & Connectivity", min: 1_500_000, max: 7_000_000, unit: "km", multiUnit: true, complexity: 0.95 },
+  { type: "Solar Street Lighting", category: "Energy", min: 500_000, max: 2_500_000, unit: "pole", multiUnit: true, complexity: 0.7 },
+  { type: "Primary Health Sub-Centre", category: "Health", min: 3_000_000, max: 9_000_000, unit: "centre", multiUnit: false, complexity: 1.5 },
+  { type: "Public Library Building", category: "Education", min: 2_000_000, max: 5_000_000, unit: "library", multiUnit: false, complexity: 1.25 },
+  { type: "Covered Drainage Line", category: "Sanitation", min: 1_000_000, max: 4_500_000, unit: "km", multiUnit: true, complexity: 1.05 },
+  { type: "Crematorium Shed", category: "Community Assets", min: 800_000, max: 2_500_000, unit: "shed", multiUnit: false, complexity: 0.85 },
+  { type: "Bus Passenger Shelter", category: "Roads & Connectivity", min: 300_000, max: 900_000, unit: "shelter", multiUnit: true, complexity: 0.65 },
+  { type: "RO Drinking Water Plant", category: "Drinking Water", min: 800_000, max: 3_000_000, unit: "plant", multiUnit: false, complexity: 0.9 },
+  { type: "Sports Ground Development", category: "Sports & Youth", min: 1_500_000, max: 5_500_000, unit: "ground", multiUnit: false, complexity: 1.1 },
+  { type: "Public Toilet Block", category: "Sanitation", min: 500_000, max: 1_800_000, unit: "block", multiUnit: true, complexity: 0.8 },
+  { type: "Village Pond Renovation", category: "Water Conservation", min: 700_000, max: 2_800_000, unit: "pond", multiUnit: false, complexity: 0.95 },
 ];
 
 /** Locality name fragments used to build plausible work titles. */

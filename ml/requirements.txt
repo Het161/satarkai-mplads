@@ -1,0 +1,9 @@
+# Pinned so the demo environment is reproducible.
+# Python 3.13 — 3.14 is the default interpreter on this machine but has broken
+# pydantic builds before, so the venv is created explicitly against 3.13.
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+pydantic==2.10.4
+scikit-learn==1.6.1
+numpy==2.2.1
+pandas==2.2.3

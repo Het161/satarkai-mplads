@@ -185,6 +185,7 @@ model Work {
   evidence  Evidence[]
   alerts    Alert[]
   planted   PlantedAnomaly[]
+  delayRisk DelayRisk?
 
   @@index([districtId, status])
   @@index([mpId])
@@ -318,4 +319,24 @@ model PlantedAnomaly {
 
   @@unique([workId, type])
   @@index([type])
+}
+
+/// Forecast that an in-progress work will breach the one-year completion
+/// window. Stored separately from Alert on purpose: an alert says something
+/// has gone wrong and is worth an officer's time, a forecast says something
+/// may go wrong and the response is to chase the agency. Mixing the two would
+/// fill the review queue with events that have not happened.
+model DelayRisk {
+  id           String   @id @default(cuid())
+  workId       String   @unique
+  work         Work     @relation(fields: [workId], references: [id], onDelete: Cascade)
+  /// Probability of breaching the window, 0-1.
+  probability  Float
+  band         String // LOW | MODERATE | HIGH | VERY_HIGH
+  /// Top contributing features, each with its value and the population median.
+  drivers      Json
+  modelVersion String
+  computedAt   DateTime @default(now())
+
+  @@index([band, probability])
 }

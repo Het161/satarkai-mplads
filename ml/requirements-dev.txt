@@ -1,0 +1,4 @@
+# Test-only dependencies for the model service.
+# Install: uv pip install --python ml/.venv/bin/python -r ml/requirements-dev.txt
+-r requirements.txt
+pytest==9.1.1

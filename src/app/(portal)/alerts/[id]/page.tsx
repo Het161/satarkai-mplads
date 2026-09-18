@@ -74,7 +74,13 @@ export default async function AlertDetailPage({
           {alert.reason}
         </p>
         <p className="mt-1 text-2xs text-slate">
-          Detected {formatDate(alert.detectedAt)} by the rule engine.
+          Detected {formatDate(alert.detectedAt)} by{" "}
+          {alert.type === "ML_ANOMALY"
+            ? "the model service"
+            : alert.type === "COST_OUTLIER" || alert.type === "IA_CONCENTRATION"
+              ? "a statistical test"
+              : "the rule engine"}
+          .
         </p>
       </div>
 

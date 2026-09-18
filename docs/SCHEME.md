@@ -70,17 +70,33 @@ apply across them:
 No labelled corpus of MPLADS fraud exists, so nothing here is trained on
 "known fraud". These are unsupervised outlier signals with the drivers exposed.
 
-| Detector | Basis |
-|----------|-------|
-| `COST_OUTLIER` | Cost per unit far from the peer distribution for the same work type within a district or state. |
-| `IA_CONCENTRATION` | One implementing agency or vendor holding a disproportionate share of a district's works or value. A signal for review, not an accusation. |
-| `ML_ANOMALY` | IsolationForest over engineered features — cost versus peers, delay days, payment-to-progress ratio, evidence completeness, agency concentration, timing — producing an Anomaly-Priority Score of 0 to 100. |
+| Detector | Basis | Runs |
+|----------|-------|------|
+| `COST_OUTLIER` | Cost per unit more than 3.5 robust standard deviations above the median for comparable works, *and* at least 2.5x that median, measured against at least 15 peers with the median absolute deviation. Both tests must pass: a work at 1.8x its peers is ordinary however confident the arithmetic sounds. | in-process |
+| `IA_CONCENTRATION` | One agency holding at least 40% of a district's sanctioned value, where that many works landing with one agency would occur by chance less than 1% of the time. A flat "more than 45%" threshold sounds decisive and is nearly meaningless — with three agencies and twenty works it happens constantly. A signal for review, not an accusation. | in-process |
+| `ML_ANOMALY` | IsolationForest over 11 engineered features — cost versus peers, delay, payment-to-progress gap, evidence completeness, agency share, timing, schedule shape — flagging the share of works hardest to explain as ordinary. | model service |
+
+The first two are statistics, not learned models, so they need no Python: a
+median and a binomial tail probability are computed in-process. Only the
+IsolationForest and the delay model need the service, which is why the platform
+still produces a full alert queue with no Python installed at all.
 
 ### Predictive
 
-Delay-risk prediction for in-progress works: the likelihood of breaching the
-one-year window, from days since sanction, progress rate, agency history and
-work type, returned as a risk band with its top drivers.
+Delay-risk prediction for running works: the likelihood of passing 365 days from
+sanction without being marked complete, returned as a probability, a risk band
+and its top drivers.
+
+It uses **only attributes fixed at the moment of sanction** — size, units,
+sanction lag, season, and the past record of the agency, district and work type,
+counting only works whose outcome was already settled on that date. Anything
+recorded after sanction would let the model read the outcome it is predicting;
+an early version did exactly that and scored an AUC of 0.98 by doing so.
+
+Forecasts are **not** alerts and are not placed in the review queue. An alert
+says something has gone wrong and carries the records that show it. A forecast
+says something may go wrong, and the response it supports is a call to the
+agency, not a case file.
 
 ---
 

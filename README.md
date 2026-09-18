@@ -51,7 +51,7 @@ Reference portal: <https://mplads.mospi.gov.in/digigov/dashboard.html>
 |-------|-------|-------|
 | **1** | Repo, stack, design tokens, Prisma schema, auth + `scopeFor()` RBAC, seed with planted anomalies | **Done** |
 | **2** | Eight rule detectors, alert generation with reason + evidence, alert queue | **Done** |
-| 3 | FastAPI ML service — IsolationForest score + delay-risk, explainable, rules-only fallback, eval script | Not started |
+| **3** | FastAPI ML service — IsolationForest score + delay-risk, explainable, rules-only fallback, eval script | **Done** |
 | 4 | Four role dashboards + single-work drill-down timeline | Not started |
 | 5 | Review workflow, audit trail, notifications, CSV/PDF export | Not started |
 | 6 | i18n (EN/HI), responsiveness, empty/loading/error states, documentation | Not started |
@@ -71,9 +71,17 @@ cp .env.example .env          # then set DATABASE_URL and SESSION_SECRET
 createdb satarkai
 npm run db:push               # apply the schema
 npm run db:seed               # generate the synthetic dataset
-npm run detect                # run the rule engine, populating the alert queue
+npm run detect                # run the detectors, populating the alert queue
 
 npm run dev                   # http://localhost:3000
+```
+
+The model layer is optional and off by default. To enable it:
+
+```bash
+npm run ml:setup              # venv on Python 3.13 + pinned dependencies
+npm run ml:serve              # in a second terminal
+npm run detect:ml             # now includes the model and delay forecasts
 ```
 
 ### Demonstration accounts
@@ -100,8 +108,10 @@ state code (`gj`, `mh`, `up`, `tn`, `wb`, `as`).
 | `npm run db:push` | Apply the Prisma schema |
 | `npm run db:seed` | Regenerate the synthetic dataset (destructive) |
 | `npm run db:reset` | Drop, re-push and re-seed |
-| `npm run detect` | Run the rule engine and reconcile the alert queue |
+| `npm run detect` | Run rules + statistics, reconcile the alert queue (no Python) |
+| `npm run detect:ml` | As above, plus the model service |
 | `npm run eval` | Score the detectors against the planted ground truth |
+| `npm run ml:setup` / `ml:serve` / `ml:test` | The Python model service |
 | `npm run check:baseline` | Verify the seed's clean baseline (see below) |
 | `npm test` | RBAC isolation tests against the seeded database |
 | `npm run typecheck` / `lint` | `tsc --noEmit` / `next lint` |
@@ -134,10 +144,12 @@ Two properties make this hold up:
 A cross-jurisdiction drill-down is **not found**, not refused — the id and the
 scope sit in the same `WHERE`, so the page cannot confirm the record exists.
 
-`npm test` proves all of it against the real seeded database: 34 tests in total,
+`npm test` proves all of it against the real seeded database: 46 tests in total,
 covering each role's isolation, cross-jurisdiction drill-down, the
 deny-by-default path for anchorless and unknown roles, the detector scoring
-maths, and the recall and precision claims above.
+maths, the recall and precision claims above, and the ML layer's two guarantees
+— that detection works with the service down, and that the delay model cannot
+see its own answer.
 
 ---
 
@@ -247,6 +259,82 @@ problem, and each was fixed at the source:
   entitlement total. The detector, the seed and the baseline check now use the
   same accounting.
 
+## The model layer
+
+Two things need scikit-learn, and they live in a separate FastAPI service
+([`ml/`](ml/README.md)): the **multivariate anomaly score** and the
+**delay-risk forecast**. Cost outliers and agency concentration do not — one is
+a median-absolute-deviation test, the other a binomial tail probability — so
+they run in-process. Adding a network hop and a second failure mode to compute a
+median would buy nothing and would make the fallback poorer.
+
+Feature engineering stays in TypeScript
+([`src/lib/detectors/features.ts`](src/lib/detectors/features.ts)), shared with
+the rule detectors, so there is one definition of "payment-to-progress gap" in
+the codebase. The service receives work ids and numbers: no scheme logic, no
+names, no personal data.
+
+**The service never blocks the platform.** `ML_MODE=rules` skips it; `ML_MODE=ml`
+calls it and treats any failure as "no model signals this run". The rule and
+statistical detectors have already built a full queue by then. An oversight
+platform that goes dark because a model server restarted is worse than one with
+no model.
+
+### Explanation by ablation
+
+Neither model gives per-case attribution of its own, and a global
+`feature_importances_` answers the wrong question — an officer needs to know why
+*this* work was flagged. So each driver is measured with a counterfactual: had
+this work been ordinary on one feature, the rest untouched, how much would its
+score fall? That drop is the contribution, in the same units as the score.
+
+Contributions do not sum to the total. Features interact, and presenting them as
+if they added up would be a tidier story than the model supports.
+
+### What the models found
+
+| | |
+|---|---|
+| Multivariate anomalies flagged | 37 of 736 sanctioned works, at 5% contamination |
+| Of those, also caught by a rule | 29 (78%) |
+| Flagged by the model alone | 8 (22%) |
+| Works planted as *unusual only in combination* | 12 |
+| Found by the model | **12 (100% recall)** |
+| Among the model's 8 solo flags | 7 of those 12, plus one cost outlier the statistical test narrowly missed |
+
+The seed plants works placed deliberately *just inside* every threshold —
+costly but under the outlier multiple, slow but inside the year, paid ahead but
+under the payment gap, on a lumpy schedule no rule examines. Nothing fires.
+Taken together they are plainly unusual, and everything-comfortably-under-every-
+limit is what deliberate gaming actually looks like. Those works are the reason
+to run a model at all, and the model finds all of them.
+
+`npm run eval` deliberately does **not** report precision for this detector.
+It is pointed at the cases no rule covers, so scoring it for failing to
+reproduce the planted rule labels would report 0% for doing its job.
+
+### Delay risk, and a leak that had to be fixed
+
+Predicting whether a running work will pass 365 days from sanction. The label is
+not a judgement but a date, which is what makes supervision defensible here.
+
+The first version reported an **AUC of 0.98** against a 3% base rate. That was
+not a good model — it was a leaking one. Built on the same features as the
+anomaly detector, its input included `delayRatio`, "days past the deadline". It
+was reading the answer.
+
+The model now uses **only attributes fixed at the moment of sanction**: size,
+units, how long the district took to sanction, the season, and the past record
+of the agency, district and work type — where those rates count only works whose
+outcome was already settled on that sanction date. The honest figure is
+**AUC 0.75 against a 25% base rate**, and `tests/ml.test.ts` asserts that no
+outcome-bearing feature can return.
+
+Forecasts are stored and shown on their own page, and are **not** raised as
+alerts. An alert says something has gone wrong and carries records that show it;
+a forecast says something may go wrong. Treating the second as the first is how
+a monitoring system starts accusing people of things that have not happened.
+
 ## Design
 
 The "Audit" system: government-serious, dense, data-first. Ink, navy, slate on
@@ -275,8 +363,18 @@ on a network call.
 - `IA_CONCENTRATION` and `COST_OUTLIER` are statistical signals. A dominant
   agency in a district may simply be the only one competent to do the work.
 - No detector output is evidence of wrongdoing.
-- The 100% eval figure is a regression test against data built to the same rule
-  definitions. It is not a claim about real-world accuracy.
+- The 100% rule-detector figure is a regression test against data built to the
+  same rule definitions. It is not a claim about real-world accuracy.
+- The delay model's AUC describes how well it recovers relationships this
+  project wrote into the seed — agency reliability, work-type complexity,
+  monsoon slippage. Real delay has its own structure, and the figure would not
+  survive contact with it unchanged.
+- The delay model sees nothing after sanction, because this dataset records only
+  a work's current progress. A real eSAKSHI feed carries staged progress
+  updates, which would let it use execution signals as they arrive without
+  leaking.
+- The synthetic baseline contains no naturally-overdue *running* works, so the
+  overdue detector's precision is measured against planted cases only.
 
 ## Further reading
 

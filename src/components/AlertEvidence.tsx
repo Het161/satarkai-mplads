@@ -38,8 +38,12 @@ export function EvidencePanels({ evidence }: { evidence: AlertEvidence }) {
       {evidence.rows && evidence.rows.length > 0 ? (
         <Card>
           <CardHeader
-            title="Records"
-            subtitle="Rows marked in red are the ones that breach the rule."
+            title={evidence.rows.some((r) => r.flagged) ? "Records" : "What drove the score"}
+            subtitle={
+              evidence.rows.some((r) => r.flagged)
+                ? "Rows marked in red are the ones that breach the rule."
+                : "Each measure, this work's value against the typical one, and how much of the score it accounts for."
+            }
           />
           <div className="overflow-x-auto">
             <table className="w-full min-w-[640px] text-sm">

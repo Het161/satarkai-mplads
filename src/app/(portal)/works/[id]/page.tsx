@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 
+import { DelayRiskPanel, type DriverRow } from "@/components/DelayRisk";
 import { Card, CardHeader, SeverityBadge, Tag } from "@/components/ui";
 import { requireSession } from "@/lib/auth";
 import { scoped } from "@/lib/scope";
@@ -37,6 +38,7 @@ export default async function WorkDetailPage({
       payments: { orderBy: { stageNo: "asc" }, include: { evidence: true } },
       evidence: true,
       alerts: { orderBy: { score: "desc" } },
+      delayRisk: true,
     },
   });
 
@@ -162,6 +164,16 @@ export default async function WorkDetailPage({
           )}
         </Card>
       </div>
+
+      {work.delayRisk ? (
+        <DelayRiskPanel
+          probability={work.delayRisk.probability}
+          band={work.delayRisk.band}
+          drivers={work.delayRisk.drivers as unknown as DriverRow[]}
+          modelVersion={work.delayRisk.modelVersion}
+          computedAt={formatDate(work.delayRisk.computedAt)}
+        />
+      ) : null}
 
       <Card>
         <CardHeader
