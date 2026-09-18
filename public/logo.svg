@@ -1,0 +1,74 @@
+<svg
+  xmlns="http://www.w3.org/2000/svg"
+  viewBox="0 0 1136 1136"
+  role="img"
+  aria-labelledby="satarkai-logo-title"
+>
+  <title id="satarkai-logo-title">SatarkAI</title>
+
+  <!--
+    The SatarkAI mark: a magnifying glass over a bar chart, one bar standing
+    out. Traced from the original raster at docs/assets/logo-source.png. The
+    lens is a least-squares fit of the original's outer boundary and every
+    bar, radius and offset below is measured from the same file, so this is
+    that mark rather than a lookalike — the rendered result differs from the
+    original by antialiasing only.
+
+    Vector rather than the PNG because the mark is used at 22px in the app
+    header and as the favicon, where a downscaled raster goes soft, and at
+    full width in the README, where a 4MB PNG does not belong.
+
+    Two colours. The orange is the mark's own #D87807, a hair off the design
+    system's severity-high #D97706 — close enough to look deliberate, kept
+    distinct so the brand does not move if that token is ever retuned. The
+    orange bar is the anomaly, and it is the only thing here allowed to be
+    that colour.
+
+    No width/height attributes: the mark scales to whatever box it is given.
+  -->
+
+  <g fill="#0E2F5C">
+    <!-- Lens rim. Fitted centre (447.6, 447.6); edges at r=379 and r=447.6. -->
+    <circle
+      cx="447.6"
+      cy="447.6"
+      r="413.3"
+      fill="none"
+      stroke="#0E2F5C"
+      stroke-width="68.6"
+    />
+
+    <!--
+      Thin inner ring, broken at the bottom where the chart baseline crosses
+      it. Sweeps 234°, from 27° anticlockwise over the top to 153°.
+    -->
+    <path
+      d="M 745.9 599.6 A 334.8 334.8 0 1 0 149.3 599.6"
+      fill="none"
+      stroke="#0E2F5C"
+      stroke-width="27"
+    />
+
+    <!-- Chart baseline. -->
+    <rect x="178.1" y="616.3" width="547" height="27" />
+
+    <!-- Bars, left to right, sitting on the baseline. -->
+    <rect x="215.1" y="455.3" width="67" height="161" />
+    <rect x="316.1" y="353.3" width="68" height="263" />
+    <rect x="418.1" y="417.3" width="68" height="199" />
+    <rect x="620.1" y="353.3" width="68" height="263" />
+
+    <!--
+      Handle, on the 45° axis through the lens centre: a 70-wide neck out of
+      the rim, then the 164-wide grip with a rounded tip. The neck starts
+      inside the rim so the two never show a seam.
+    -->
+    <g transform="rotate(45 447.6 447.6)">
+      <rect x="877.6" y="412.6" width="105" height="70" />
+      <rect x="982.6" y="365.6" width="375" height="164" rx="45" />
+    </g>
+  </g>
+
+  <!-- The anomaly. -->
+  <rect x="517.1" y="252.3" width="72" height="364" fill="#D87807" />
+</svg>

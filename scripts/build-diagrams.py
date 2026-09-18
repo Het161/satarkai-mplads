@@ -15,10 +15,40 @@ Constraints these have to satisfy, which shape every choice below:
 """
 
 import math
+import re
 from pathlib import Path
 
-OUT = Path(__file__).resolve().parents[1] / "docs" / "assets"
+ROOT = Path(__file__).resolve().parents[1]
+OUT = ROOT / "docs" / "assets"
 OUT.mkdir(parents=True, exist_ok=True)
+
+LOGO = ROOT / "public" / "logo.svg"
+# Next.js only picks up a favicon from inside app/, and serves it at a hashed
+# path, so the <img> tags need their own copy under public/. public/logo.svg is
+# the source; this is the copy, synced here so the two cannot drift.
+APP_ICON = ROOT / "src" / "app" / "icon.svg"
+
+
+def logo_mark(x, y, size, ink):
+    """
+    The SatarkAI mark, placed and recoloured for a dark ground.
+
+    Read out of public/logo.svg rather than redrawn here. The mark's geometry
+    is fiddly — a fitted circle, a broken arc, a rotated handle — and a second
+    hand-placed copy would drift from the first the moment either is touched.
+    Only the navy is swapped; the orange bar is the anomaly and keeps its
+    colour on any background.
+    """
+    body = LOGO.read_text(encoding="utf-8")
+    body = body[body.index(">", body.index("<svg")) + 1 : body.rindex("</svg>")]
+    body = re.sub(r"<title\b.*?</title>", "", body, flags=re.S)
+    body = re.sub(r"<!--.*?-->", "", body, flags=re.S)
+    body = body.replace("#0E2F5C", ink)
+    scale = size / 1136
+    return (
+        f'<g transform="translate({x},{y}) scale({scale:.5f})" '
+        f'opacity="0.97">{body}</g>'
+    )
 
 # --- Audit palette, same tokens the application uses -------------------------
 INK      = "#0B1220"
@@ -203,12 +233,15 @@ def banner():
             f'begin="{delay}s" repeatCount="indefinite"/></circle>'
         )
 
+    # Mark and wordmark share a baseline block: mark on the left, name and
+    # transliteration stacked beside it.
+    s.append(logo_mark(72, 88, 76, "#DCE8F8"))
     s.append(
-        f'<text x="72" y="150" {FONT} font-size="62" font-weight="700" fill="#FFFFFF" '
+        f'<text x="168" y="150" {FONT} font-size="62" font-weight="700" fill="#FFFFFF" '
         f'letter-spacing="-1.5">Satark<tspan fill="{BLUE}">AI</tspan></text>'
     )
     s.append(
-        f'<text x="76" y="182" {FONT} font-size="15" fill="{SLATE}" letter-spacing="3.5">'
+        f'<text x="172" y="182" {FONT} font-size="15" fill="{SLATE}" letter-spacing="3.5">'
         f'सतर्क · VIGILANT</text>'
     )
     s.append(
@@ -499,10 +532,17 @@ def jurisdiction():
     (OUT / "jurisdiction.svg").write_text("".join(s), encoding="utf-8")
 
 
+def sync_app_icon():
+    """Keep the favicon byte-identical to the mark it is a copy of."""
+    APP_ICON.write_text(LOGO.read_text(encoding="utf-8"), encoding="utf-8")
+
+
 if __name__ == "__main__":
     banner()
     architecture()
     pipeline()
     jurisdiction()
+    sync_app_icon()
     for f in sorted(OUT.glob("*.svg")):
         print(f"  {f.name:22} {f.stat().st_size / 1024:6.1f} KB")
+    print(f"  {'icon.svg (synced)':22} {APP_ICON.stat().st_size / 1024:6.1f} KB")

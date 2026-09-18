@@ -102,9 +102,16 @@ export default async function PortalLayout({
         <div className="mx-auto flex max-w-[1400px] flex-wrap items-center gap-x-6 gap-y-2 px-4 py-2.5">
           <Link
             href="/dashboard"
-            className="text-base font-semibold tracking-tight text-ink"
+            className="flex items-center gap-2 text-base font-semibold tracking-tight text-ink"
           >
-            Satark<span className="text-navy">AI</span>
+            {/* Decorative: the wordmark beside it already says the name, so
+                announcing the logo too would just repeat it. */}
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/logo.svg" alt="" aria-hidden width={24} height={24} />
+            {/* One flex item, or the gap would land between "Satark" and "AI". */}
+            <span>
+              Satark<span className="text-navy">AI</span>
+            </span>
           </Link>
 
           <nav aria-label={dict.nav.main} className="flex gap-1">

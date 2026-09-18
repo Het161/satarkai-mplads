@@ -74,11 +74,16 @@ export default async function LoginPage() {
     >
       <div className="w-full max-w-sm">
         <header className="mb-6">
-          <div className="flex items-baseline gap-2">
-            <h1 className="text-xl font-semibold tracking-tight text-ink">
-              Satark<span className="text-navy">AI</span>
-            </h1>
-            <span className="text-2xs text-slate">सतर्क</span>
+          <div className="flex items-center gap-3">
+            {/* Decorative — the name is set beside it as an h1. */}
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/logo.svg" alt="" aria-hidden width={40} height={40} />
+            <div className="flex items-baseline gap-2">
+              <h1 className="text-xl font-semibold tracking-tight text-ink">
+                Satark<span className="text-navy">AI</span>
+              </h1>
+              <span className="text-2xs text-slate">सतर्क</span>
+            </div>
             <div className="ml-auto">
               <LocaleSwitcher />
             </div>
@@ -90,13 +95,13 @@ export default async function LoginPage() {
 
         <div className="rounded border border-line bg-white p-5 shadow-card">
           <LoginForm
-              labels={{
-                email: dict.auth.email,
-                password: dict.auth.password,
-                signIn: dict.auth.signIn,
-                signingIn: dict.auth.signingIn,
-              }}
-            />
+            labels={{
+              email: dict.auth.email,
+              password: dict.auth.password,
+              signIn: dict.auth.signIn,
+              signingIn: dict.auth.signingIn,
+            }}
+          />
         </div>
 
         <DemoAccounts />

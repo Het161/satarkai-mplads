@@ -1,3 +1,6 @@
+import { existsSync } from "node:fs";
+import { join } from "node:path";
+
 import PDFDocument from "pdfkit";
 
 import { requireSession, UnauthenticatedError } from "@/lib/auth";
@@ -93,7 +96,11 @@ export async function GET(
   };
 
   const field = (label: string, value: string) => {
-    doc.font("Helvetica").fontSize(9).fillColor(SLATE).text(pdfText(label), { continued: true });
+    doc
+      .font("Helvetica")
+      .fontSize(9)
+      .fillColor(SLATE)
+      .text(pdfText(label), { continued: true });
     doc.fillColor(INK).text(pdfText(`  ${value}`), { align: "right" });
   };
 
@@ -112,12 +119,28 @@ export async function GET(
   doc.y = bannerTop + bannerHeight + 10;
   doc.x = 48;
 
-  doc.fillColor(INK).font("Helvetica-Bold").fontSize(15).text("SatarkAI");
+  // Masthead. The logo is raster here because pdfkit draws images, not SVG —
+  // public/logo.png is the same mark. If the file is not on disk the note
+  // still prints: a case note without a logo is fine, a download that 500s
+  // because of a decoration is not.
+  const headerTop = doc.y;
+  const logoPath = join(process.cwd(), "public", "logo.png");
+  const hasLogo = existsSync(logoPath);
+  if (hasLogo) doc.image(logoPath, 48, headerTop, { width: 26 });
+  const textLeft = hasLogo ? 48 + 34 : 48;
+
+  doc
+    .fillColor(INK)
+    .font("Helvetica-Bold")
+    .fontSize(15)
+    .text("SatarkAI", textLeft, headerTop);
   doc
     .fillColor(SLATE)
     .font("Helvetica")
     .fontSize(8)
-    .text("MPLADS monitoring - alert case note");
+    .text("MPLADS monitoring - alert case note", textLeft);
+  doc.x = 48;
+  doc.y = Math.max(doc.y, headerTop + 26);
   rule();
 
   doc
@@ -152,17 +175,27 @@ export async function GET(
   heading("The work");
   field("Title", w.title);
   field("Work code", w.workCode);
-  field("Location", `${w.locality}, ${w.district.name}, ${w.district.state.name}`);
+  field(
+    "Location",
+    `${w.locality}, ${w.district.name}, ${w.district.state.name}`,
+  );
   field("Recommended by", `${w.mp.name} (${w.mp.constituency})`);
   field("Implementing agency", w.ia?.name ?? "Not designated");
   field("Stage", WORK_STATUS_LABELS[w.status]);
   field("Financial year", w.financialYear);
   field("Recommended amount", pdfMoney(w.recommendedAmount));
-  field("Sanctioned amount", w.sanctionedAmount ? pdfMoney(w.sanctionedAmount) : "-");
+  field(
+    "Sanctioned amount",
+    w.sanctionedAmount ? pdfMoney(w.sanctionedAmount) : "-",
+  );
   field("Recorded progress", `${w.progressPct}%`);
 
   heading("The rule that fired");
-  doc.font("Helvetica").fontSize(9).fillColor(INK).text(pdfText(evidence.rule), { width });
+  doc
+    .font("Helvetica")
+    .fontSize(9)
+    .fillColor(INK)
+    .text(pdfText(evidence.rule), { width });
 
   heading("Figures relied on");
   for (const f of evidence.facts) field(f.label, f.value);
@@ -179,10 +212,15 @@ export async function GET(
         .font("Helvetica")
         .fontSize(8)
         .fillColor(SLATE)
-        .text(pdfText(row.values.map((v) => `${v.label}: ${v.value}`).join("  -  ")), {
-          width,
-          indent: 10,
-        });
+        .text(
+          pdfText(
+            row.values.map((v) => `${v.label}: ${v.value}`).join("  -  "),
+          ),
+          {
+            width,
+            indent: 10,
+          },
+        );
       doc.moveDown(0.2);
     }
     if (evidence.rows.length > 20) {
@@ -199,7 +237,11 @@ export async function GET(
       `${c.label} (${Math.round(c.weight * 100)}% weight)`,
       `${c.value}/100 -> contributes ${Math.round(c.weight * c.value)} points`,
     );
-    doc.font("Helvetica").fontSize(8).fillColor(SLATE).text(pdfText(c.basis), { indent: 10 });
+    doc
+      .font("Helvetica")
+      .fontSize(8)
+      .fillColor(SLATE)
+      .text(pdfText(c.basis), { indent: 10 });
   }
 
   doc.moveDown(0.2);
