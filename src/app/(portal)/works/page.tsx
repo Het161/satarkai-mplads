@@ -5,7 +5,7 @@ import { Card, CardHeader, EmptyState, Tag } from "@/components/ui";
 import { requireSession } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { formatDate, formatINR, formatNumber } from "@/lib/format";
-import { WORK_STATUS_LABELS } from "@/lib/scheme";
+import { t } from "@/lib/i18n";
 
 export const metadata: Metadata = { title: "Works" };
 export const dynamic = "force-dynamic";
@@ -18,6 +18,7 @@ export default async function WorksPage({
   searchParams: { page?: string };
 }) {
   const { scope } = await requireSession();
+  const dict = t();
 
   const page = Math.max(1, Number(searchParams.page ?? "1") || 1);
 
@@ -42,12 +43,12 @@ export default async function WorksPage({
     <div className="space-y-4">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-lg font-semibold tracking-tight text-ink">Works</h1>
+          <h1 className="text-lg font-semibold tracking-tight text-ink">{dict.nav.works}</h1>
           <p className="mt-0.5 text-2xs text-slate">
-            {formatNumber(total)} work{total === 1 ? "" : "s"} in {scope.label.toLowerCase()}.
+            {formatNumber(total)} · {dict.scope[scope.label]}
           </p>
         </div>
-        <Tag>Page {page} of {pages}</Tag>
+        <Tag>{dict.common.page} {page} {dict.common.of} {pages}</Tag>
       </div>
 
       <Card>
@@ -58,8 +59,8 @@ export default async function WorksPage({
 
         {works.length === 0 ? (
           <EmptyState
-            title="No works in your jurisdiction"
-            body="Nothing has been recommended under MPLADS for the state, district, constituency or agency attached to this account."
+            title={dict.empty.noWorksTitle}
+            body={dict.empty.noWorksBody}
           />
         ) : (
           <div className="overflow-x-auto">
@@ -69,13 +70,13 @@ export default async function WorksPage({
               </caption>
               <thead>
                 <tr className="border-b border-line text-2xs uppercase tracking-wide text-slate">
-                  <th scope="col" className="px-4 py-2 text-left font-medium">Work</th>
-                  <th scope="col" className="px-4 py-2 text-left font-medium">District</th>
-                  <th scope="col" className="px-4 py-2 text-left font-medium">Recommended by</th>
-                  <th scope="col" className="px-4 py-2 text-right font-medium">Sanctioned</th>
-                  <th scope="col" className="px-4 py-2 text-left font-medium">Stage</th>
-                  <th scope="col" className="px-4 py-2 text-right font-medium">Progress</th>
-                  <th scope="col" className="px-4 py-2 text-right font-medium">Sanctioned on</th>
+                  <th scope="col" className="px-4 py-2 text-left font-medium">{dict.table.work}</th>
+                  <th scope="col" className="px-4 py-2 text-left font-medium">{dict.table.district}</th>
+                  <th scope="col" className="px-4 py-2 text-left font-medium">{dict.table.recommendedBy}</th>
+                  <th scope="col" className="px-4 py-2 text-right font-medium">{dict.kpi.sanctioned}</th>
+                  <th scope="col" className="px-4 py-2 text-left font-medium">{dict.table.stage}</th>
+                  <th scope="col" className="px-4 py-2 text-right font-medium">{dict.table.progress}</th>
+                  <th scope="col" className="px-4 py-2 text-right font-medium">{dict.table.due}</th>
                 </tr>
               </thead>
               <tbody>
@@ -102,7 +103,7 @@ export default async function WorksPage({
                       {w.sanctionedAmount ? formatINR(w.sanctionedAmount) : "—"}
                     </td>
                     <td className="px-4 py-2 text-slate">
-                      {WORK_STATUS_LABELS[w.status]}
+                      {dict.workStatus[w.status]}
                     </td>
                     <td className="tnum px-4 py-2 text-right text-ink">
                       {w.progressPct}%
@@ -124,10 +125,10 @@ export default async function WorksPage({
           >
             {page > 1 ? (
               <Link href={`/works?page=${page - 1}`} className="text-navy hover:underline">
-                ← Previous
+                ← {dict.common.previous}
               </Link>
             ) : (
-              <span className="text-slate/50">← Previous</span>
+              <span className="text-slate/50">← {dict.common.previous}</span>
             )}
             <span className="text-slate">
               {formatNumber((page - 1) * PAGE_SIZE + 1)}–
@@ -135,10 +136,10 @@ export default async function WorksPage({
             </span>
             {page < pages ? (
               <Link href={`/works?page=${page + 1}`} className="text-navy hover:underline">
-                Next →
+                {dict.common.next} →
               </Link>
             ) : (
-              <span className="text-slate/50">Next →</span>
+              <span className="text-slate/50">{dict.common.next} →</span>
             )}
           </nav>
         ) : null}

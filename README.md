@@ -54,7 +54,7 @@ Reference portal: <https://mplads.mospi.gov.in/digigov/dashboard.html>
 | **3** | FastAPI ML service — IsolationForest score + delay-risk, explainable, rules-only fallback, eval script | **Done** |
 | **4** | Four role dashboards + single-work drill-down timeline | **Done** |
 | **5** | Review workflow, audit trail, notifications, CSV/PDF export | **Done** |
-| 6 | i18n (EN/HI), responsiveness, empty/loading/error states, documentation | Not started |
+| **6** | i18n (EN/HI), accessibility, responsiveness, empty/loading/error states, end-to-end tests | **Done** |
 
 ---
 
@@ -114,7 +114,8 @@ state code (`gj`, `mh`, `up`, `tn`, `wb`, `as`).
 | `npm run ml:setup` / `ml:serve` / `ml:test` | The Python model service |
 | `npm run check:baseline` | Verify the seed's clean baseline (see below) |
 | `npm run tune` | Read the reviewer feedback loop back (see below) |
-| `npm test` | RBAC isolation tests against the seeded database |
+| `npm test` | Unit and integration tests against the seeded database |
+| `npm run test:e2e` | End-to-end: review workflow, exports, accessibility, Hindi |
 | `npm run typecheck` / `lint` | `tsc --noEmit` / `next lint` |
 
 ---
@@ -510,13 +511,91 @@ Both the PDF and the platform say, twice, that a signal is a prompt for review
 and not a finding. A page that leaves an office without that line on it is
 exactly the page that gets misread as an accusation.
 
+## Languages
+
+English and Hindi, switchable from any page. The toggle is a form rather than a
+link, so it works with JavaScript disabled, and it is labelled in the language it
+switches *to* — the only labelling that helps someone who cannot read the
+current one.
+
+`<html lang>` follows the choice. That attribute is not cosmetic: a screen
+reader announcing Devanagari with an English voice is unintelligible rather than
+merely wrong, and `lang` is the only thing that tells it which to use.
+
+Hindi is typed against English
+([`src/lib/i18n/en.ts`](src/lib/i18n/en.ts)), so a key missing from one or
+renamed in the other is a compile error rather than a string that quietly falls
+back to English in production.
+
+**What is translated, and what is not.** The interface is: navigation, headings,
+KPI labels, table headers, buttons, form labels, work stages, alert types,
+severities, review states, the standing notices and every empty state.
+**Generated content is not** — an alert's reason, its evidence rows, the model's
+drivers. Those are assembled by the detectors with figures interpolated into
+them, and translating them honestly means having each detector emit a message
+key and parameters instead of a finished sentence. That is a real refactor
+across eleven detectors, and doing it badly would cost more in explainability
+than it gains in coverage. The limitation is stated rather than hidden behind a
+toggle that only half works.
+
+## Accessibility
+
+WCAG 2.1 AA, checked with axe on every page rather than asserted —
+`e2e/accessibility.spec.ts` fails the build on any violation. Currently **zero
+across all seven pages** plus the work drill-down.
+
+It caught a real failure the first time it ran. The "high" severity badge
+rendered amber text (`#D97706`) on its own pale amber tint at **2.70:1**, well
+under the 4.5:1 AA asks of body text. The severity tokens had been chosen to
+work as *marks* — a bar, a border, a dot — where 3:1 is the bar, and nobody had
+re-checked them as small text. The badge text is now a darker step of the same
+hue, computed against both grounds it appears on. No human eyeballing the page
+would have caught that; axe did in one run.
+
+Also covered: a skip link as the first tab stop, a visible focus ring on every
+interactive element, table captions, `aria-busy` on loading states, and
+`prefers-reduced-motion` honoured globally.
+
+## Loading, error and empty states
+
+- **Loading** — skeleton blocks shaped like the content, not a spinner. A
+  national dashboard aggregates across every work in the scheme, so there is a
+  real wait to fill.
+- **Error** — says the one thing an officer needs beyond "it broke": *no data
+  was changed*. On a platform where every action is recorded, "did my decision
+  go through?" is the first question a failure raises, and leaving it unanswered
+  is worse than the error.
+- **Empty** — every list says *why* it is empty and what would fill it, because
+  "no alerts" and "the detectors have not been run" look identical and mean
+  opposite things.
+
+## Tests
+
+| Suite | Covers |
+|---|---|
+| `npm test` (79) | RBAC isolation, detector correctness and scoring, dashboard aggregates, the review state machine, the ML layer's fallback and leakage guarantees |
+| `npm run test:e2e` (21) | The review workflow through a real server action, export scoping, WCAG AA on every page, keyboard navigation, Hindi |
+| `npm run ml:test` (12) | The model service — refusing to guess on thin data, explanations matching what drove each score |
+
+The end-to-end suite exists for what unit tests genuinely cannot reach. A
+Next.js server action needs a running server to be invoked at all, so the guards
+inside it — role, jurisdiction, transition legality, required note — are only
+truly exercised there. The most important test in the file forges the hidden
+`alertId` to point at another district's alert, because a permission check that
+lives in a hidden button is not a permission check. It is also idempotent: the
+mutating tests reset their own alert, so the suite runs as many times as you
+like.
+
 ## Design
 
 The "Audit" system: government-serious, dense, data-first. Ink, navy, slate on
 paper; tabular figures for every money and count column; severity colour
 (critical / high / medium / low / info) reserved for risk and never used
-decoratively. WCAG AA, keyboard navigable, reduced-motion respected, and
-readable at phone width — officials check these on phones.
+decoratively.
+
+Responsive down to 390px, verified by measuring `scrollWidth` against the
+viewport on every page rather than by looking: a table that scrolls sideways
+inside its own container is fine, a page that does is not.
 
 ## Stack
 
@@ -553,6 +632,13 @@ on a network call.
 - Anomalies are spread evenly across all 36 districts, so a single district
   dashboard shows only a handful. That is realistic, but it makes the District
   role look emptier than a real one would during a demo.
+- Hindi covers the interface, not generated content. An alert's reason stays in
+  English until the detectors emit message keys rather than sentences.
+- The Hindi has not been reviewed by a native administrative-Hindi speaker. The
+  terminology follows the scheme's own published usage where that exists, but a
+  department would want it checked before deployment.
+- `NOTIFY_MODE=console` is the default and no SMTP transport is implemented, so
+  email is recorded as skipped rather than sent. SMS and IVR are stubs.
 
 ## Further reading
 

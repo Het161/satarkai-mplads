@@ -21,9 +21,10 @@ export type DriverRow = {
   contribution: number;
 };
 
+/** Same computed steps as the severity badges — see SEVERITY_STYLES in ui.tsx. */
 const BAND_STYLES: Record<string, string> = {
   VERY_HIGH: "border-severity-critical/30 bg-severity-critical/5 text-severity-critical",
-  HIGH: "border-severity-high/30 bg-severity-high/5 text-severity-high",
+  HIGH: "border-severity-high/30 bg-severity-high/5 text-[#9A4A04]",
   MODERATE: "border-line bg-paper text-slate",
   LOW: "border-line bg-paper text-slate",
 };

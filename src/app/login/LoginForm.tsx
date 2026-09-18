@@ -6,7 +6,16 @@ import { loginAction, type LoginState } from "@/app/actions/auth";
 
 const initialState: LoginState = { error: null };
 
-function SubmitButton() {
+/** Labels arrive as props: this is a client component, so it cannot read the
+ *  locale cookie itself. */
+export type LoginLabels = {
+  email: string;
+  password: string;
+  signIn: string;
+  signingIn: string;
+};
+
+function SubmitButton({ labels }: { labels: LoginLabels }) {
   const { pending } = useFormStatus();
   return (
     <button
@@ -14,12 +23,12 @@ function SubmitButton() {
       disabled={pending}
       className="w-full rounded bg-navy px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-ink disabled:cursor-not-allowed disabled:opacity-60"
     >
-      {pending ? "Signing in…" : "Sign in"}
+      {pending ? labels.signingIn : labels.signIn}
     </button>
   );
 }
 
-export function LoginForm() {
+export function LoginForm({ labels }: { labels: LoginLabels }) {
   const [state, formAction] = useFormState(loginAction, initialState);
 
   return (
@@ -29,7 +38,7 @@ export function LoginForm() {
           htmlFor="email"
           className="mb-1 block text-2xs font-medium uppercase tracking-wide text-slate"
         >
-          Official email
+          {labels.email}
         </label>
         <input
           id="email"
@@ -47,7 +56,7 @@ export function LoginForm() {
           htmlFor="password"
           className="mb-1 block text-2xs font-medium uppercase tracking-wide text-slate"
         >
-          Password
+          {labels.password}
         </label>
         <input
           id="password"
@@ -68,7 +77,7 @@ export function LoginForm() {
         </p>
       ) : null}
 
-      <SubmitButton />
+      <SubmitButton labels={labels} />
     </form>
   );
 }

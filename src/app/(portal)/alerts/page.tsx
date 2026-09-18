@@ -9,7 +9,7 @@ import { prisma } from "@/lib/db";
 import { formatDate, formatINR, formatNumber } from "@/lib/format";
 import { scoped } from "@/lib/scope";
 import { ALERT_TYPE_LABELS } from "@/lib/scheme";
-import { ALERT_STATE_LABELS } from "@/lib/review";
+import { t } from "@/lib/i18n";
 
 export const metadata: Metadata = { title: "Alert queue" };
 export const dynamic = "force-dynamic";
@@ -76,6 +76,7 @@ export default async function AlertsPage({
   searchParams: Search;
 }) {
   const { scope } = await requireSession();
+  const dict = t();
 
   const page = Math.max(1, Number(searchParams.page ?? "1") || 1);
 
@@ -126,10 +127,10 @@ export default async function AlertsPage({
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-lg font-semibold tracking-tight text-ink">
-            Alert queue
+            {dict.common.alertQueue}
           </h1>
           <p className="mt-0.5 text-2xs text-slate">
-            {scope.label} · highest priority first. Each alert carries the rule
+            {dict.scope[scope.label]} · highest priority first. Each alert carries the rule
             it broke and the records behind it.
           </p>
         </div>
@@ -138,29 +139,29 @@ export default async function AlertsPage({
             href={`/api/export/alerts.csv${searchParams.state || searchParams.type ? `?${new URLSearchParams(Object.entries(searchParams).filter(([k, v]) => v && k !== "page") as [string, string][]).toString()}` : ""}`}
             className="rounded border border-line bg-white px-2.5 py-1 text-2xs font-medium text-navy hover:bg-paper"
           >
-            Export this queue (CSV)
+            {dict.common.exportCsv}
           </a>
-          <Tag>Page {page} of {pages}</Tag>
+          <Tag>{dict.common.page} {page} {dict.common.of} {pages}</Tag>
         </div>
       </div>
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <KpiCard label="Alerts in scope" value={formatNumber(totalInScope)} />
+        <KpiCard label={dict.kpi.alertsInScope} value={formatNumber(totalInScope)} />
         <KpiCard
-          label="Critical"
+          label={dict.table.critical}
           value={formatNumber(critical)}
           emphasis={critical > 0}
-          hint="score 80 and above"
+          hint={dict.hint.scoreAtLeast80}
         />
         <KpiCard
-          label="Awaiting review"
+          label={dict.kpi.awaitingReview}
           value={formatNumber(openCount)}
-          hint="no action recorded yet"
+          hint={dict.hint.noActionYet}
         />
         <KpiCard
-          label="Sanctioned value flagged"
+          label={dict.kpi.valueFlagged}
           value={formatINR(valueAtRisk._sum.sanctionedAmount)}
-          hint="across all flagged works"
+          hint={dict.hint.acrossFlagged}
         />
       </div>
 
@@ -168,18 +169,18 @@ export default async function AlertsPage({
 
       <Card>
         <CardHeader
-          title="Filters"
-          subtitle="Filters narrow what you already have access to. They never widen it."
+          title={dict.common.filters}
+          subtitle={dict.common.filtersNote}
         />
         <div className="space-y-2 px-4 py-3">
-          <FilterRow label="Type">
-            <Filter label="All" param="type" value={null} current={searchParams.type} search={searchParams} />
+          <FilterRow label={dict.table.type}>
+            <Filter label={dict.common.all} param="type" value={null} current={searchParams.type} search={searchParams} />
             {(Object.keys(ALERT_TYPE_LABELS) as AlertType[])
               .filter((t) => typeCounts.has(t))
               .map((t) => (
                 <Filter
                   key={t}
-                  label={`${ALERT_TYPE_LABELS[t]} (${typeCounts.get(t)})`}
+                  label={`${dict.alertType[t]} (${typeCounts.get(t)})`}
                   param="type"
                   value={t}
                   current={searchParams.type}
@@ -188,12 +189,12 @@ export default async function AlertsPage({
               ))}
           </FilterRow>
 
-          <FilterRow label="Severity">
-            <Filter label="All" param="severity" value={null} current={searchParams.severity} search={searchParams} />
+          <FilterRow label={dict.table.severity}>
+            <Filter label={dict.common.all} param="severity" value={null} current={searchParams.severity} search={searchParams} />
             {SEVERITIES.filter((s) => sevCounts.has(s)).map((s) => (
               <Filter
                 key={s}
-                label={`${s.charAt(0)}${s.slice(1).toLowerCase()} (${sevCounts.get(s)})`}
+                label={`${dict.severity[s]} (${sevCounts.get(s)})`}
                 param="severity"
                 value={s}
                 current={searchParams.severity}
@@ -202,12 +203,12 @@ export default async function AlertsPage({
             ))}
           </FilterRow>
 
-          <FilterRow label="Review state">
-            <Filter label="All" param="state" value={null} current={searchParams.state} search={searchParams} />
+          <FilterRow label={dict.table.status}>
+            <Filter label={dict.common.all} param="state" value={null} current={searchParams.state} search={searchParams} />
             {STATES.map((s) => (
               <Filter
                 key={s}
-                label={ALERT_STATE_LABELS[s]}
+                label={dict.alertState[s]}
                 param="state"
                 value={s}
                 current={searchParams.state}
@@ -220,14 +221,14 @@ export default async function AlertsPage({
 
       <Card>
         <CardHeader
-          title={`${formatNumber(total)} alert${total === 1 ? "" : "s"}`}
-          subtitle="Ordered by Anomaly-Priority Score."
+          title={`${formatNumber(total)} ${dict.nav.alerts.toLowerCase()}`}
+          subtitle={dict.common.orderedByScore}
         />
 
         {alerts.length === 0 ? (
           <EmptyState
-            title="Nothing to review"
-            body="No alert in your jurisdiction matches these filters. That may mean the filters are too narrow, or that the rule engine has not been run since the data last changed."
+            title={dict.empty.noAlertsTitle}
+            body={dict.empty.noAlertsBody}
           />
         ) : (
           <ul className="divide-y divide-line/60">
@@ -235,7 +236,7 @@ export default async function AlertsPage({
               <li key={a.id} className="px-4 py-3 hover:bg-paper">
                 <div className="flex flex-wrap items-start gap-x-3 gap-y-1">
                   <SeverityBadge severity={a.severity}>
-                    {a.severity.toLowerCase()}
+                    {dict.severity[a.severity]}
                   </SeverityBadge>
                   <span className="tnum rounded border border-line bg-paper px-1.5 py-0.5 text-2xs font-semibold text-ink">
                     {a.score}
@@ -244,10 +245,10 @@ export default async function AlertsPage({
                     href={`/alerts/${a.id}`}
                     className="text-sm font-medium text-navy hover:underline"
                   >
-                    {ALERT_TYPE_LABELS[a.type]}
+                    {dict.alertType[a.type]}
                   </Link>
                   <span className="text-sm text-ink">· {a.work.title}</span>
-                  {a.state !== "OPEN" ? <Tag>{ALERT_STATE_LABELS[a.state]}</Tag> : null}
+                  {a.state !== "OPEN" ? <Tag>{dict.alertState[a.state]}</Tag> : null}
                 </div>
 
                 <p className="mt-1 max-w-4xl text-2xs leading-relaxed text-slate">

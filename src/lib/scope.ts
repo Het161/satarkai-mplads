@@ -28,10 +28,22 @@ const IMPOSSIBLE_ID = "__no_jurisdiction__";
 
 const DENY_ALL = { id: IMPOSSIBLE_ID } as const;
 
+/** What this scope covers, as a key the UI translates. */
+export type ScopeLabel =
+  | "national"
+  | "state"
+  | "district"
+  | "constituency"
+  | "agency"
+  | "none";
+
 export type Scope = {
   role: Role;
-  /** Human-readable description of what this user can see, for the UI header. */
-  label: string;
+  /**
+   * What this user can see. A key rather than a sentence, because it is shown
+   * on every page and has to be readable in the officer's own language.
+   */
+  label: ScopeLabel;
   work: Prisma.WorkWhereInput;
   alert: Prisma.AlertWhereInput;
   district: Prisma.DistrictWhereInput;
@@ -47,7 +59,7 @@ export function scopeFor(user: ScopedUser): Scope {
     case "MINISTRY":
       return {
         role: user.role,
-        label: "All States & UTs",
+        label: "national",
         work: {},
         alert: {},
         district: {},
@@ -63,7 +75,7 @@ export function scopeFor(user: ScopedUser): Scope {
       const stateId = user.stateId;
       return {
         role: user.role,
-        label: "State jurisdiction",
+        label: "state",
         work: { district: { stateId } },
         alert: { work: { district: { stateId } } },
         district: { stateId },
@@ -80,7 +92,7 @@ export function scopeFor(user: ScopedUser): Scope {
       const districtId = user.districtId;
       return {
         role: user.role,
-        label: "District jurisdiction",
+        label: "district",
         work: { districtId },
         alert: { work: { districtId } },
         district: { id: districtId },
@@ -97,7 +109,7 @@ export function scopeFor(user: ScopedUser): Scope {
       const mpId = user.mpId;
       return {
         role: user.role,
-        label: "Own constituency works",
+        label: "constituency",
         work: { mpId },
         alert: { work: { mpId } },
         district: { works: { some: { mpId } } },
@@ -114,7 +126,7 @@ export function scopeFor(user: ScopedUser): Scope {
       const iaId = user.iaId;
       return {
         role: user.role,
-        label: "Assigned works",
+        label: "agency",
         work: { iaId },
         alert: { work: { iaId } },
         district: { agencies: { some: { id: iaId } } },
@@ -133,7 +145,7 @@ export function scopeFor(user: ScopedUser): Scope {
 function denyAll(role: Role): Scope {
   return {
     role,
-    label: "No jurisdiction assigned",
+    label: "none",
     work: DENY_ALL,
     alert: DENY_ALL,
     district: DENY_ALL,

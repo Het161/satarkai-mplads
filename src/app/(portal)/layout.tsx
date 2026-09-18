@@ -6,7 +6,8 @@ import { SyntheticDataBanner } from "@/components/DataNotices";
 import { getSessionUser } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { scopeFor } from "@/lib/scope";
-import { ROLE_LABELS } from "@/lib/scheme";
+import { LocaleSwitcher } from "@/components/LocaleSwitcher";
+import { t } from "@/lib/i18n";
 
 export const dynamic = "force-dynamic";
 
@@ -54,12 +55,12 @@ async function jurisdictionName(user: {
 }
 
 const NAV = [
-  { href: "/dashboard", label: "Dashboard" },
-  { href: "/alerts", label: "Alerts" },
-  { href: "/forecast", label: "Early warning" },
-  { href: "/works", label: "Works" },
-  { href: "/audit", label: "Audit trail" },
-];
+  { href: "/dashboard", key: "dashboard" },
+  { href: "/alerts", key: "alerts" },
+  { href: "/forecast", key: "forecast" },
+  { href: "/works", key: "works" },
+  { href: "/audit", key: "audit" },
+] as const;
 
 export default async function PortalLayout({
   children,
@@ -69,6 +70,7 @@ export default async function PortalLayout({
   const user = await getSessionUser();
   if (!user) redirect("/login");
 
+  const dict = t();
   const scope = scopeFor(user);
   const [jurisdiction, unread] = await Promise.all([
     jurisdictionName(user),
@@ -85,14 +87,14 @@ export default async function PortalLayout({
             Satark<span className="text-navy">AI</span>
           </Link>
 
-          <nav aria-label="Main" className="flex gap-1">
+          <nav aria-label={dict.nav.main} className="flex gap-1">
             {NAV.map((item) => (
               <Link
                 key={item.href}
                 href={item.href}
                 className="rounded px-2.5 py-1 text-2xs font-medium text-slate hover:bg-paper hover:text-ink"
               >
-                {item.label}
+                {dict.nav[item.key]}
               </Link>
             ))}
           </nav>
@@ -102,14 +104,14 @@ export default async function PortalLayout({
               href="/notifications"
               className="relative rounded px-2.5 py-1 text-2xs font-medium text-slate hover:bg-paper hover:text-ink"
             >
-              Notifications
+              {dict.nav.notifications}
               {unread > 0 ? (
                 <span className="tnum ml-1 rounded-full bg-severity-info px-1.5 py-0.5 text-[10px] font-semibold text-white">
                   {unread > 99 ? "99+" : unread}
                 </span>
               ) : null}
               <span className="sr-only">
-                {unread > 0 ? `${unread} unread` : "none unread"}
+                {unread > 0 ? `${unread} ${dict.common.unread}` : ""}
               </span>
             </Link>
 
@@ -118,7 +120,7 @@ export default async function PortalLayout({
                 {user.name}
               </div>
               <div className="truncate text-2xs text-slate">
-                {ROLE_LABELS[user.role]} · {jurisdiction}
+                {dict.role[user.role]} · {jurisdiction}
               </div>
             </div>
             <form action={logoutAction}>
@@ -126,22 +128,21 @@ export default async function PortalLayout({
                 type="submit"
                 className="whitespace-nowrap rounded border border-line px-2.5 py-1 text-2xs font-medium text-slate hover:bg-paper hover:text-ink"
               >
-                Sign out
+                {dict.nav.signOut}
               </button>
             </form>
+            <LocaleSwitcher />
           </div>
         </div>
       </header>
 
       <main id="main" className="mx-auto max-w-[1400px] px-4 py-5">
-        {scope.label === "No jurisdiction assigned" ? (
+        {scope.label === "none" ? (
           <div
             role="alert"
             className="rounded border border-severity-critical/30 bg-severity-critical/10 px-4 py-3 text-2xs text-severity-critical"
           >
-            This account has no jurisdiction assigned, so no scheme data can be
-            shown. Contact the administrator to attach a state, district,
-            constituency or agency to the account.
+            {dict.auth.noJurisdiction}
           </div>
         ) : (
           children

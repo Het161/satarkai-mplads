@@ -21,7 +21,8 @@
     "ml:serve": "ml/.venv/bin/uvicorn app.main:app --app-dir ml --host 127.0.0.1 --port 8000",
     "ml:setup": "uv venv ml/.venv --python $(which python3.13) && uv pip install --python ml/.venv/bin/python -r ml/requirements.txt",
     "ml:test": "ml/.venv/bin/python -m pytest ml/tests -q",
-    "tune": "tsx -r dotenv/config scripts/tune-thresholds.ts dotenv_config_path=.env"
+    "tune": "tsx -r dotenv/config scripts/tune-thresholds.ts dotenv_config_path=.env",
+    "test:e2e": "playwright test"
   },
   "dependencies": {
     "@fontsource-variable/inter": "^5.3.0",
@@ -39,10 +40,12 @@
     "zod": "^4.6.5"
   },
   "devDependencies": {
+    "@playwright/test": "^1.63.0",
     "@types/node": "^20",
     "@types/pdfkit": "^0.17.6",
     "@types/react": "^18",
     "@types/react-dom": "^18",
+    "axe-core": "^4.13.0",
     "dotenv": "^18.0.0",
     "eslint": "^8",
     "eslint-config-next": "14.2.15",

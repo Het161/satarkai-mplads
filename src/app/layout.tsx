@@ -1,5 +1,7 @@
 import type { Metadata, Viewport } from "next";
 
+import { getLocale, htmlLang, t } from "@/lib/i18n";
+
 // Self-hosted: no network request at render time, so the app works offline.
 import "@fontsource-variable/inter";
 import "./globals.css";
@@ -23,11 +25,17 @@ export default function RootLayout({
 }: {
   children: React.ReactNode;
 }) {
+  // `lang` has to follow the chosen locale, not sit hard-coded at "en".
+  // A screen reader announces Devanagari with an English voice otherwise,
+  // which is unintelligible rather than merely wrong.
+  const locale = getLocale();
+  const dict = t();
+
   return (
-    <html lang="en">
+    <html lang={htmlLang(locale)}>
       <body>
         <a href="#main" className="skip-link">
-          Skip to main content
+          {dict.nav.skipToContent}
         </a>
         {children}
       </body>

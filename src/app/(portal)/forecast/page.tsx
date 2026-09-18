@@ -4,6 +4,7 @@ import type { Metadata } from "next";
 import { DelayRiskBadge } from "@/components/DelayRisk";
 import { Card, CardHeader, EmptyState, KpiCard, Tag } from "@/components/ui";
 import { requireSession } from "@/lib/auth";
+import { t as tr } from "@/lib/i18n";
 import { prisma } from "@/lib/db";
 import { formatDate, formatINR, formatNumber } from "@/lib/format";
 import { scoped } from "@/lib/scope";
@@ -23,6 +24,7 @@ export const dynamic = "force-dynamic";
  */
 export default async function ForecastPage() {
   const { scope } = await requireSession();
+  const dict = tr();
 
   const where = scoped(scope.work, { delayRisk: { isNot: null } });
 
@@ -62,7 +64,7 @@ export default async function ForecastPage() {
             Early warning
           </h1>
           <p className="mt-0.5 max-w-3xl text-2xs leading-relaxed text-slate">
-            {scope.label} · works still running, ranked by the estimated chance
+            {dict.scope[scope.label]} · works still running, ranked by the estimated chance
             of passing {COMPLETION_WINDOW_DAYS} days from sanction without being
             marked complete.
           </p>

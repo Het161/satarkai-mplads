@@ -5,9 +5,9 @@ import { Card, CardHeader, EmptyState, KpiCard, Tag } from "@/components/ui";
 import { requireSession } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { formatNumber } from "@/lib/format";
-import { ALERT_STATE_LABELS } from "@/lib/review";
+import { t } from "@/lib/i18n";
 import { scoped } from "@/lib/scope";
-import { ALERT_TYPE_LABELS, ROLE_LABELS } from "@/lib/scheme";
+
 
 export const metadata: Metadata = { title: "Audit trail" };
 export const dynamic = "force-dynamic";
@@ -34,6 +34,7 @@ export default async function AuditPage({
   searchParams: { page?: string };
 }) {
   const { user, scope } = await requireSession();
+  const dict = t();
   const page = Math.max(1, Number(searchParams.page ?? "1") || 1);
 
   const where = scoped(scope.alert, {});
@@ -76,30 +77,30 @@ export default async function AuditPage({
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-lg font-semibold tracking-tight text-ink">
-            Audit trail
+            {dict.nav.audit}
           </h1>
           <p className="mt-0.5 max-w-4xl text-2xs leading-relaxed text-slate">
-            {scope.label} · every decision recorded against an alert, newest
+            {dict.scope[scope.label]} · every decision recorded against an alert, newest
             first. Records are append-only: a decision is answered by recording
             another, never by removing it.
           </p>
         </div>
-        <Tag>Page {page} of {pages}</Tag>
+        <Tag>{dict.common.page} {page} {dict.common.of} {pages}</Tag>
       </div>
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <KpiCard label="Decisions recorded" value={formatNumber(total)} />
+        <KpiCard label={dict.kpi.decisionsRecorded} value={formatNumber(total)} />
         <KpiCard
-          label="Explained"
+          label={dict.kpi.explained}
           value={formatNumber(counts.get("EXPLAINED") ?? 0)}
-          hint="closed with a reason"
+          hint={dict.hint.closedWithReason}
         />
         <KpiCard
-          label="Escalated"
+          label={dict.kpi.escalated}
           value={formatNumber(counts.get("ESCALATED") ?? 0)}
-          hint="sent upward"
+          hint={dict.hint.sentUpward}
         />
-        <KpiCard label="Officers involved" value={formatNumber(officers)} />
+        <KpiCard label={dict.kpi.officersInvolved} value={formatNumber(officers)} />
       </div>
 
       <p className="rounded border border-severity-info/30 bg-severity-info/5 px-3 py-2 text-2xs leading-relaxed text-slate">
@@ -124,8 +125,8 @@ export default async function AuditPage({
 
         {actions.length === 0 ? (
           <EmptyState
-            title="Nothing recorded yet"
-            body="No officer has acted on an alert in your jurisdiction. Open an alert from the queue and record a decision to start the trail."
+            title={dict.empty.noAuditTitle}
+            body={dict.empty.noAuditBody}
           />
         ) : (
           <div className="overflow-x-auto">
@@ -135,12 +136,12 @@ export default async function AuditPage({
               </caption>
               <thead>
                 <tr className="border-b border-line text-2xs uppercase tracking-wide text-slate">
-                  <th scope="col" className="px-4 py-2 text-left font-medium">When</th>
-                  <th scope="col" className="px-4 py-2 text-left font-medium">Officer</th>
-                  <th scope="col" className="px-4 py-2 text-left font-medium">Decision</th>
-                  <th scope="col" className="px-4 py-2 text-left font-medium">Alert</th>
-                  <th scope="col" className="px-4 py-2 text-left font-medium">Work</th>
-                  <th scope="col" className="px-4 py-2 text-left font-medium">Reason given</th>
+                  <th scope="col" className="px-4 py-2 text-left font-medium">{dict.table.when}</th>
+                  <th scope="col" className="px-4 py-2 text-left font-medium">{dict.table.officer}</th>
+                  <th scope="col" className="px-4 py-2 text-left font-medium">{dict.table.decision}</th>
+                  <th scope="col" className="px-4 py-2 text-left font-medium">{dict.table.alerts}</th>
+                  <th scope="col" className="px-4 py-2 text-left font-medium">{dict.table.work}</th>
+                  <th scope="col" className="px-4 py-2 text-left font-medium">{dict.table.reasonGiven}</th>
                 </tr>
               </thead>
               <tbody>
@@ -152,23 +153,23 @@ export default async function AuditPage({
                     <td className="px-4 py-2">
                       <div className="text-ink">{a.byUser.name}</div>
                       <div className="text-2xs text-slate">
-                        {ROLE_LABELS[a.byUser.role]}
+                        {dict.role[a.byUser.role]}
                       </div>
                     </td>
                     <td className="px-4 py-2 text-ink">
                       {a.fromState ? (
                         <span className="text-2xs text-slate">
-                          {ALERT_STATE_LABELS[a.fromState]} →{" "}
+                          {dict.alertState[a.fromState]} →{" "}
                         </span>
                       ) : null}
-                      {ALERT_STATE_LABELS[a.toState]}
+                      {dict.alertState[a.toState]}
                     </td>
                     <td className="px-4 py-2">
                       <Link
                         href={`/alerts/${a.alertId}`}
                         className="text-navy hover:underline"
                       >
-                        {ALERT_TYPE_LABELS[a.alert.type]}
+                        {dict.alertType[a.alert.type]}
                       </Link>
                       <div className="tnum text-2xs text-slate">
                         score {a.alert.score}
@@ -198,10 +199,10 @@ export default async function AuditPage({
           >
             {page > 1 ? (
               <Link href={`/audit?page=${page - 1}`} className="text-navy hover:underline">
-                ← Newer
+                ← {dict.common.newer}
               </Link>
             ) : (
-              <span className="text-slate/50">← Newer</span>
+              <span className="text-slate/50">← {dict.common.newer}</span>
             )}
             <span className="text-slate">
               {formatNumber((page - 1) * PAGE_SIZE + 1)}–
@@ -209,10 +210,10 @@ export default async function AuditPage({
             </span>
             {page < pages ? (
               <Link href={`/audit?page=${page + 1}`} className="text-navy hover:underline">
-                Older →
+                {dict.common.older} →
               </Link>
             ) : (
-              <span className="text-slate/50">Older →</span>
+              <span className="text-slate/50">{dict.common.older} →</span>
             )}
           </nav>
         ) : null}

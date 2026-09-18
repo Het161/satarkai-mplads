@@ -4,6 +4,8 @@ import type { Metadata } from "next";
 import { getSessionUser } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { LoginForm } from "./LoginForm";
+import { LocaleSwitcher } from "@/components/LocaleSwitcher";
+import { t } from "@/lib/i18n";
 
 export const metadata: Metadata = { title: "Sign in" };
 export const dynamic = "force-dynamic";
@@ -14,6 +16,7 @@ export const dynamic = "force-dynamic";
  * five MPLADS roles. A real deployment would remove this block outright.
  */
 async function DemoAccounts() {
+  const dict = t();
   const users = await prisma.user.findMany({
     where: {
       email: {
@@ -40,10 +43,10 @@ async function DemoAccounts() {
   return (
     <div className="mt-6 rounded border border-line bg-paper px-4 py-3">
       <p className="text-2xs font-semibold uppercase tracking-wide text-slate">
-        Demonstration accounts
+        {dict.auth.demoAccounts}
       </p>
       <p className="mt-1 text-2xs text-slate">
-        Each sees only its own jurisdiction. Password:{" "}
+        {dict.auth.demoNote}{" "}
         <code className="rounded bg-white px-1 py-0.5 text-ink">
           satark@2026
         </code>
@@ -62,6 +65,7 @@ async function DemoAccounts() {
 
 export default async function LoginPage() {
   if (await getSessionUser()) redirect("/dashboard");
+  const dict = t();
 
   return (
     <main
@@ -75,23 +79,30 @@ export default async function LoginPage() {
               Satark<span className="text-navy">AI</span>
             </h1>
             <span className="text-2xs text-slate">सतर्क</span>
+            <div className="ml-auto">
+              <LocaleSwitcher />
+            </div>
           </div>
           <p className="mt-1 text-2xs leading-relaxed text-slate">
-            MPLADS monitoring &amp; anomaly detection · Ministry of Statistics
-            and Programme Implementation · Data Informatics &amp; Innovation
-            Division
+            {dict.app.tagline} · {dict.app.ministry}
           </p>
         </header>
 
         <div className="rounded border border-line bg-white p-5 shadow-card">
-          <LoginForm />
+          <LoginForm
+              labels={{
+                email: dict.auth.email,
+                password: dict.auth.password,
+                signIn: dict.auth.signIn,
+                signingIn: dict.auth.signingIn,
+              }}
+            />
         </div>
 
         <DemoAccounts />
 
         <p className="mt-6 text-2xs leading-relaxed text-slate">
-          Demonstration build on synthetic data. Signals produced here are
-          prompts for human review, never findings of fraud.
+          {dict.auth.demoFooter}
         </p>
       </div>
     </main>

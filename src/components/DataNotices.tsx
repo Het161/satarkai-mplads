@@ -1,3 +1,4 @@
+import { t } from "@/lib/i18n";
 import { DATA_COVERAGE_NOTE } from "@/lib/scheme";
 
 /**
@@ -11,37 +12,38 @@ import { DATA_COVERAGE_NOTE } from "@/lib/scheme";
  */
 
 export function SyntheticDataBanner() {
+  const dict = t();
   return (
     <div
       role="note"
       className="border-b border-severity-high/30 bg-severity-high/10 px-4 py-1.5 text-2xs text-[#7A4A06]"
     >
       <span className="font-semibold uppercase tracking-wide">
-        Synthetic demonstration data
+        {dict.notice.syntheticTitle}
       </span>{" "}
-      — every figure, work, Member of Parliament, agency and vendor shown here
-      is generated for demonstration. No official MPLADS record is reproduced.
-      Real state and district names are used for geographic realism only.
+      — {dict.notice.synthetic}
     </div>
   );
 }
 
 export function CoverageGapNotice() {
+  const dict = t();
   return (
     <p className="rounded border border-line bg-paper px-3 py-2 text-2xs leading-relaxed text-slate">
-      <span className="font-medium text-ink">Coverage:</span>{" "}
+      <span className="font-medium text-ink">{dict.notice.coverageTitle}</span>{" "}
       {DATA_COVERAGE_NOTE}
     </p>
   );
 }
 
 export function HumanDecidesNotice() {
+  const dict = t();
   return (
     <p className="rounded border border-severity-info/30 bg-severity-info/5 px-3 py-2 text-2xs leading-relaxed text-slate">
-      <span className="font-medium text-ink">AI flags, a human decides.</span>{" "}
-      Every signal on this platform is a risk-prioritised prompt for review, not
-      a finding of fraud. Alerts carry the reason and the records behind them,
-      and every action an officer takes is recorded in the audit trail.
+      <span className="font-medium text-ink">
+        {dict.notice.humanDecidesTitle}
+      </span>{" "}
+      {dict.notice.humanDecides}
     </p>
   );
 }

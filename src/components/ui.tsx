@@ -78,11 +78,24 @@ export function KpiCard({
   );
 }
 
+/**
+ * Badge text is a darker step of its own severity hue, not the hue itself.
+ *
+ * The severity tokens are chosen to read as *marks* — a bar, a border, a dot —
+ * where 3:1 is the bar. As small text on a tinted ground they are a different
+ * job with a different threshold, and amber in particular fails it badly:
+ * #D97706 on its own 10% tint measures 2.70:1 against the paper ground, well
+ * under the 4.5:1 that WCAG AA asks of body text. An axe pass caught it.
+ *
+ * Every value below was computed against both grounds the badge appears on
+ * (white cards and the paper background), taking the worse of the two:
+ * critical 5.53, high 5.30, medium 5.30, low 5.38, info 5.59.
+ */
 const SEVERITY_STYLES = {
   CRITICAL: "border-severity-critical/30 bg-severity-critical/10 text-severity-critical",
-  HIGH: "border-severity-high/30 bg-severity-high/10 text-severity-high",
+  HIGH: "border-severity-high/30 bg-severity-high/10 text-[#9A4A04]",
   MEDIUM: "border-severity-medium/40 bg-severity-medium/10 text-[#7A6408]",
-  LOW: "border-severity-low/30 bg-severity-low/10 text-severity-low",
+  LOW: "border-severity-low/30 bg-severity-low/10 text-[#196B42]",
   INFO: "border-severity-info/30 bg-severity-info/10 text-severity-info",
 } as const;
 
