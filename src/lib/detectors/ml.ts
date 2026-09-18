@@ -160,7 +160,11 @@ export async function detectMlAnomalies(
       makeFinding(
         w.id,
         "ML_ANOMALY",
-        `This work sits apart from the rest on several measures at once — most of all ${top.label.toLowerCase()}, where it reads ${formatDriverValue(top)} against a typical ${formatDriverValue({ ...top, value: top.peer_median })}. No single rule is broken; the combination is what stands out, which is precisely what a rule-by-rule check cannot see.`,
+        // Deliberately makes no claim about what the rules did or did not find.
+        // An earlier version said "no single rule is broken", which was false
+        // whenever a rule detector had also flagged the work — and the model
+        // has no way of knowing either way.
+        `This work sits apart from the rest on several measures at once — most of all ${top.label.toLowerCase()}, where it reads ${formatDriverValue(top)} against a typical ${formatDriverValue({ ...top, value: top.peer_median })}. It is the combination that stands out, which is what a rule-by-rule check cannot see.`,
         {
           rule: `An IsolationForest over ${FEATURE_NAMES.length} engineered features, trained on all ${outcome.data.trained_on} sanctioned works in the dataset, flagging the ${Math.round(outcome.data.contamination * 100)}% that are hardest to explain as ordinary. Unsupervised: there is no labelled record of MPLADS irregularity to learn from, so the model is told nothing about what a problem looks like.`,
           facts: [

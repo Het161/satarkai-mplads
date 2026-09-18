@@ -287,11 +287,17 @@ async function main() {
         const locality = uniqueLocality(district.code, wt.type);
         if (!locality) continue;
 
-        // Recommendation date: inside the FY, and clear of the last 40 days so
-        // the baseline never trips FY-end clustering.
+        // Recommendation date: anywhere inside the financial year.
+        //
+        // An earlier version held recommendations clear of the last 40 days of
+        // each year, which left a visible annual gap in every trend chart —
+        // something a reviewer would reasonably read as a bug. The exclusion
+        // was never needed: the year-end clustering rule reads SANCTION dates,
+        // not recommendation dates, and sanctions are kept clear separately by
+        // nudgeClearOfFyEnd.
         const start = fyStart(fy);
         const end = fyEnd(fy);
-        const span = Math.max(1, daysBetween(start, end) - 40);
+        const span = Math.max(1, daysBetween(start, end) - 5);
         const recommendedAt = addDays(start, int(5, span));
         if (recommendedAt > NOW) continue;
 

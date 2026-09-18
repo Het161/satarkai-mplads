@@ -52,7 +52,7 @@ Reference portal: <https://mplads.mospi.gov.in/digigov/dashboard.html>
 | **1** | Repo, stack, design tokens, Prisma schema, auth + `scopeFor()` RBAC, seed with planted anomalies | **Done** |
 | **2** | Eight rule detectors, alert generation with reason + evidence, alert queue | **Done** |
 | **3** | FastAPI ML service — IsolationForest score + delay-risk, explainable, rules-only fallback, eval script | **Done** |
-| 4 | Four role dashboards + single-work drill-down timeline | Not started |
+| **4** | Four role dashboards + single-work drill-down timeline | **Done** |
 | 5 | Review workflow, audit trail, notifications, CSV/PDF export | Not started |
 | 6 | i18n (EN/HI), responsiveness, empty/loading/error states, documentation | Not started |
 
@@ -144,12 +144,13 @@ Two properties make this hold up:
 A cross-jurisdiction drill-down is **not found**, not refused — the id and the
 scope sit in the same `WHERE`, so the page cannot confirm the record exists.
 
-`npm test` proves all of it against the real seeded database: 46 tests in total,
+`npm test` proves all of it against the real seeded database: 64 tests in total,
 covering each role's isolation, cross-jurisdiction drill-down, the
 deny-by-default path for anchorless and unknown roles, the detector scoring
 maths, the recall and precision claims above, and the ML layer's two guarantees
 — that detection works with the service down, and that the delay model cannot
-see its own answer.
+see its own answer — and every dashboard aggregate, including the raw SQL,
+which is exactly where a jurisdiction filter goes missing quietly.
 
 ---
 
@@ -335,6 +336,74 @@ alerts. An alert says something has gone wrong and carries records that show it;
 a forecast says something may go wrong. Treating the second as the first is how
 a monitoring system starts accusing people of things that have not happened.
 
+## The five dashboards
+
+One route, five pages. Each is built around the decision that role actually
+makes, rather than showing everyone the same grid with different numbers:
+
+| Role | The question it answers | What it leads with |
+|------|------------------------|--------------------|
+| **Ministry / Central Nodal Agency** | Which states carry the most risk? | National KPIs, pipeline and spend trends, alerts by state and by type, states compared |
+| **State Nodal Authority** | Which district do I chase? | Districts ranked against each other, the named works past the one-year rule, completion rates |
+| **District Authority** | What can I fix today? | Payment stages missing evidence, works finished but unmarked, agency performance |
+| **Member of Parliament** | What did my entitlement buy? | Entitlement against recommended, sanctioned and paid, year by year; what is running late |
+| **Implementing Agency** | What do I still owe? | Photographs to upload, works to mark complete, works in hand |
+
+The MP page is deliberately the plainest: an MP is not an auditor and has no
+alerts to action, so nothing on it uses the word "anomaly", shows a priority
+score, or asks for a review. A delayed school block is described as a delayed
+school block.
+
+What does **not** vary is data access. All five call the same scope-filtered
+query functions in [`src/lib/dashboard.ts`](src/lib/dashboard.ts); only the
+`Scope` differs. There is no "national mode" switch — a Ministry user simply
+has a scope that matches everything.
+
+### The work timeline
+
+[`WorkTimeline`](src/components/WorkTimeline.tsx) lays a work out in order —
+recommendation, sanction, agency designation, each payment stage with its
+evidence, the one-year window, completion, completion marking — and pins every
+risk signal to the step it concerns.
+
+That ordering is the point. "Missing asset evidence" in a sidebar is a label;
+the same signal sitting under the third payment stage, beside the date that
+stage was released and the amount that left the treasury, is something a person
+can act on. Steps that have not happened are shown as pending rather than
+omitted, so a work that is sanctioned and running looks different from one that
+is sanctioned and abandoned.
+
+## Charts
+
+Colour is assigned by the job it does, and the palettes were run through a
+validator — OKLCH lightness band, chroma floor, colour-vision separation under
+protanopia and deuteranopia, normal-vision separation, contrast against the card
+surface — rather than chosen by eye. The values and their results are recorded
+in [`src/lib/viz.ts`](src/lib/viz.ts).
+
+The rule that shapes the rest: **severity colour is reserved for risk.** The
+critical/high/medium/low tokens mean something to an officer, so charts draw
+from a separate categorical set and never borrow them for "the third line".
+
+A few decisions worth naming, each of which started as a mistake in this build:
+
+- **Three series, not more.** The categorical palette validates all-pairs at
+  three slots; a fourth puts yellow beside orange and fails the separation
+  floors. A fourth series folds into "Other" or the chart becomes small
+  multiples.
+- **No dual axes.** Work counts and rupees are different scales, so they are two
+  charts. Two y-scales on one plot invent a correlation that is not in the data.
+- **Linear interpolation, not splines.** A smooth curve through sparse integer
+  counts draws waves between 0, 1 and 2 — shape the data does not have. A
+  district with three works in a month should look like three works in a month.
+- **Every chart can show its figures as a table**, which is both an
+  accessibility requirement and the relief the validator demands for the third
+  series colour, whose contrast sits below 3:1.
+- **A chart has to earn its place.** The state dashboard originally ranked
+  districts by overdue count — a bar chart of 1, 1, 1, 1, 2 sitting directly
+  above a table with the same column. It now names the overdue works instead,
+  which is what an SNA would actually want.
+
 ## Design
 
 The "Audit" system: government-serious, dense, data-first. Ink, navy, slate on
@@ -375,6 +444,9 @@ on a network call.
   leaking.
 - The synthetic baseline contains no naturally-overdue *running* works, so the
   overdue detector's precision is measured against planted cases only.
+- Anomalies are spread evenly across all 36 districts, so a single district
+  dashboard shows only a handful. That is realistic, but it makes the District
+  role look emptier than a real one would during a demo.
 
 ## Further reading
 
