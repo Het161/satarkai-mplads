@@ -11,8 +11,8 @@ import { prisma } from "@/lib/db";
 import type { AlertEvidence } from "@/lib/detectors/types";
 import { formatDate, formatINR } from "@/lib/format";
 import { scoped } from "@/lib/scope";
-import { availableActions, canAct, escalatesTo, ALERT_STATE_LABELS } from "@/lib/review";
-import { ALERT_TYPE_LABELS, WORK_STATUS_LABELS } from "@/lib/scheme";
+import { fill, t as tr } from "@/lib/i18n";
+import { availableActions, canAct } from "@/lib/review";
 
 export const metadata: Metadata = { title: "Alert" };
 export const dynamic = "force-dynamic";
@@ -23,6 +23,7 @@ export default async function AlertDetailPage({
   params: { id: string };
 }) {
   const { user, scope } = await requireSession();
+  const d = tr();
 
   // Jurisdiction sits in the same WHERE as the id: an alert outside the user's
   // scope is not found, rather than found and refused.
@@ -44,7 +45,9 @@ export default async function AlertDetailPage({
   // Other works this alert refers to — the earlier duplicate, the year's other
   // recommendations, the rest of a year-end cluster. Scope-filtered, so a
   // related work outside the user's jurisdiction simply is not listed.
-  const relatedIds = (evidence.relatedWorkIds ?? []).filter((id) => id !== w.id);
+  const relatedIds = (evidence.relatedWorkIds ?? []).filter(
+    (id) => id !== w.id,
+  );
   const related = relatedIds.length
     ? await prisma.work.findMany({
         where: scoped(scope.work, { id: { in: relatedIds } }),
@@ -57,38 +60,46 @@ export default async function AlertDetailPage({
     <div className="space-y-4">
       <div>
         <Link href="/alerts" className="text-2xs text-navy hover:underline">
-          ← Alert queue
+          {d.alertDetail.back}
         </Link>
         <div className="mt-1 flex flex-wrap items-center gap-2">
           <SeverityBadge severity={alert.severity}>
-            {alert.severity.toLowerCase()}
+            {d.severity[alert.severity]}
           </SeverityBadge>
           <h1 className="text-lg font-semibold tracking-tight text-ink">
-            {ALERT_TYPE_LABELS[alert.type]}
+            {d.alertType[alert.type]}
           </h1>
           <span className="tnum rounded border border-line bg-white px-2 py-0.5 text-sm font-semibold text-ink">
             {alert.score}
-            <span className="ml-1 text-2xs font-normal text-slate">/ 100</span>
+            <span className="ml-1 text-2xs font-normal text-slate">
+              {d.alertDetail.outOf}
+            </span>
           </span>
-          <Tag>{ALERT_STATE_LABELS[alert.state]}</Tag>
+          <Tag>{d.alertState[alert.state]}</Tag>
           <a
             href={`/api/export/alert/${alert.id}`}
             className="ml-auto rounded border border-line bg-white px-2.5 py-1 text-2xs font-medium text-navy hover:bg-paper"
           >
-            Download case note (PDF)
+            {d.common.downloadPdf}
           </a>
         </div>
-        <p className="mt-2 max-w-4xl text-sm leading-relaxed text-ink">
+        <p
+          data-detector-text
+          className="mt-2 max-w-4xl text-sm leading-relaxed text-ink"
+        >
           {alert.reason}
         </p>
         <p className="mt-1 text-2xs text-slate">
-          Detected {formatDate(alert.detectedAt)} by{" "}
-          {alert.type === "ML_ANOMALY"
-            ? "the model service"
-            : alert.type === "COST_OUTLIER" || alert.type === "IA_CONCENTRATION"
-              ? "a statistical test"
-              : "the rule engine"}
-          .
+          {fill(d.alertDetail.detectedBy, {
+            date: formatDate(alert.detectedAt),
+            source:
+              alert.type === "ML_ANOMALY"
+                ? d.alertDetail.sourceModel
+                : alert.type === "COST_OUTLIER" ||
+                    alert.type === "IA_CONCENTRATION"
+                  ? d.alertDetail.sourceStatistical
+                  : d.alertDetail.sourceRules,
+          })}
         </p>
       </div>
 
@@ -98,29 +109,38 @@ export default async function AlertDetailPage({
         <div className="space-y-4">
           <Card>
             <CardHeader
-              title="The work"
+              title={d.alertDetail.workTitle}
               action={
                 <Link
                   href={`/works/${w.id}`}
                   className="whitespace-nowrap text-2xs text-navy hover:underline"
                 >
-                  Full timeline →
+                  {d.common.fullTimeline} →
                 </Link>
               }
             />
             <dl className="divide-y divide-line/60 text-sm">
               {[
-                ["Title", w.title],
-                ["Work code", w.workCode],
-                ["Location", `${w.locality}, ${w.district.name}`],
-                ["State", w.district.state.name],
-                ["Recommended by", `${w.mp.name} · ${w.mp.constituency}`],
-                ["Implementing agency", w.ia?.name ?? "Not designated"],
-                ["Stage", WORK_STATUS_LABELS[w.status]],
-                ["Sanctioned amount", w.sanctionedAmount ? formatINR(w.sanctionedAmount) : "—"],
-                ["Financial year", w.financialYear],
+                [d.table.work, w.title],
+                [d.table.workCode, w.workCode],
+                [d.table.location, `${w.locality}, ${w.district.name}`],
+                [d.table.state, w.district.state.name],
+                [d.table.recommendedBy, `${w.mp.name} · ${w.mp.constituency}`],
+                [
+                  d.alertDetail.implementingAgency,
+                  w.ia?.name ?? d.dash.notDesignated,
+                ],
+                [d.table.stage, d.workStatus[w.status]],
+                [
+                  d.alertDetail.sanctionedAmount,
+                  w.sanctionedAmount ? formatINR(w.sanctionedAmount) : "—",
+                ],
+                [d.alertDetail.financialYear, w.financialYear],
               ].map(([label, value]) => (
-                <div key={label} className="flex justify-between gap-4 px-4 py-2">
+                <div
+                  key={label}
+                  className="flex justify-between gap-4 px-4 py-2"
+                >
                   <dt className="shrink-0 text-slate">{label}</dt>
                   <dd className="text-right text-ink">{value}</dd>
                 </div>
@@ -131,8 +151,8 @@ export default async function AlertDetailPage({
           {related.length > 0 ? (
             <Card>
               <CardHeader
-                title="Related works"
-                subtitle="Other works this finding compared against."
+                title={d.alertDetail.relatedTitle}
+                subtitle={d.alertDetail.relatedSubtitle}
               />
               <ul className="divide-y divide-line/60">
                 {related.map((r) => (
@@ -152,27 +172,30 @@ export default async function AlertDetailPage({
               </ul>
               {related.length < relatedIds.length ? (
                 <p className="border-t border-line px-4 py-2 text-2xs text-slate">
-                  {relatedIds.length - related.length} further related work
-                  {relatedIds.length - related.length === 1 ? " is" : "s are"}{" "}
-                  outside your jurisdiction and not shown.
+                  {fill(
+                    relatedIds.length - related.length === 1
+                      ? d.alertDetail.relatedHiddenOne
+                      : d.alertDetail.relatedHiddenMany,
+                    { count: relatedIds.length - related.length },
+                  )}
                 </p>
               ) : null}
             </Card>
           ) : null}
 
           <Card>
-            <CardHeader title="Review history" />
+            <CardHeader title={d.review.history} />
             {alert.actions.length === 0 ? (
               <p className="px-4 py-4 text-2xs text-slate">
-                No action recorded yet. This alert is awaiting review.
+                {d.review.noAction}
               </p>
             ) : (
               <ul className="divide-y divide-line/60">
                 {alert.actions.map((a) => (
                   <li key={a.id} className="px-4 py-2 text-sm">
                     <div className="text-ink">
-                      {a.fromState ? `${ALERT_STATE_LABELS[a.fromState]} → ` : ""}
-                      {ALERT_STATE_LABELS[a.toState]}
+                      {a.fromState ? `${d.alertState[a.fromState]} → ` : ""}
+                      {d.alertState[a.toState]}
                     </div>
                     <div className="text-2xs text-slate">
                       {a.byUser.name} · {formatDate(a.at)}
@@ -186,8 +209,7 @@ export default async function AlertDetailPage({
             )}
             {!canAct(user.role) ? (
               <p className="border-t border-line px-4 py-2 text-2xs text-slate">
-                Your role has read access to this alert. Action on oversight
-                alerts rests with the district, state and ministry authorities.
+                {d.review.readOnly}
               </p>
             ) : null}
           </Card>
@@ -197,7 +219,12 @@ export default async function AlertDetailPage({
               alertId={alert.id}
               state={alert.state}
               actions={availableActions(alert.state)}
-              escalationTarget={escalatesTo(user.role)}
+              escalationTarget={d.escalate[user.role]}
+              labels={{
+                review: d.review,
+                action: d.action,
+                alertState: d.alertState,
+              }}
             />
           ) : null}
         </div>

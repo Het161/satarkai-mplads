@@ -2,6 +2,7 @@ import { cookies } from "next/headers";
 
 import { en, type Dictionary } from "./en";
 import { hi } from "./hi";
+import { DEFAULT_LOCALE, isLocale, LOCALE_COOKIE, type Locale } from "./locale";
 
 /**
  * Locale resolution.
@@ -11,19 +12,23 @@ import { hi } from "./hi";
  * and no URLs to keep stable for search engines. A cookie keeps the language
  * with the officer across the whole platform, which is what someone working a
  * queue actually wants, and adds no routing surface to get RBAC wrong in.
+ *
+ * This module reads `next/headers`, so it is server-only. Anything a client
+ * component needs — the cookie name, `fill`, `htmlLang` — lives in ./locale.ts
+ * and is re-exported here so call sites have one import either way.
  */
 
-export const LOCALES = ["en", "hi"] as const;
-export type Locale = (typeof LOCALES)[number];
-
-export const LOCALE_COOKIE = "satarkai_locale";
-export const DEFAULT_LOCALE: Locale = "en";
+export {
+  DEFAULT_LOCALE,
+  fill,
+  htmlLang,
+  isLocale,
+  LOCALE_COOKIE,
+  LOCALES,
+  type Locale,
+} from "./locale";
 
 const DICTIONARIES: Record<Locale, Dictionary> = { en, hi };
-
-export function isLocale(value: string | undefined): value is Locale {
-  return !!value && (LOCALES as readonly string[]).includes(value);
-}
 
 export function getLocale(): Locale {
   const value = cookies().get(LOCALE_COOKIE)?.value;
@@ -37,11 +42,6 @@ export function t(): Dictionary {
 
 export function dictionaryFor(locale: Locale): Dictionary {
   return DICTIONARIES[locale];
-}
-
-/** The BCP 47 tag for `<html lang>` and for Intl formatting. */
-export function htmlLang(locale: Locale): string {
-  return locale === "hi" ? "hi-IN" : "en-IN";
 }
 
 export type { Dictionary };

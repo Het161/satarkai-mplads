@@ -1,9 +1,16 @@
 import Link from "next/link";
 
-import { Card, CardHeader, EmptyState, SeverityBadge, Tag } from "@/components/ui";
+import {
+  Card,
+  CardHeader,
+  EmptyState,
+  SeverityBadge,
+  Tag,
+} from "@/components/ui";
 import { DelayRiskBadge } from "@/components/DelayRisk";
 import { formatDate, formatINR, formatNumber, formatPct } from "@/lib/format";
-import { ALERT_TYPE_LABELS, WORK_STATUS_LABELS } from "@/lib/scheme";
+import { fill, t as tr } from "@/lib/i18n";
+import type { ALERT_TYPE_LABELS, WORK_STATUS_LABELS } from "@/lib/scheme";
 import type { RankedRow } from "@/lib/dashboard";
 
 /* Pieces every role dashboard shares, so the four differ in what they show
@@ -21,7 +28,9 @@ export function DashboardHeading({
   return (
     <div className="flex flex-wrap items-end justify-between gap-3">
       <div>
-        <h1 className="text-lg font-semibold tracking-tight text-ink">{title}</h1>
+        <h1 className="text-lg font-semibold tracking-tight text-ink">
+          {title}
+        </h1>
         <p className="mt-0.5 max-w-4xl text-2xs leading-relaxed text-slate">
           {subtitle}
         </p>
@@ -55,26 +64,30 @@ export function AlertQueuePreview({
   total: number;
   emptyBody: string;
 }) {
+  const d = tr();
   return (
     <Card>
       <CardHeader
-        title="Needs attention first"
-        subtitle="Open alerts, highest Anomaly-Priority Score first. Each carries the rule it broke and the records behind it."
+        title={d.dash.needsAttentionTitle}
+        subtitle={d.dash.needsAttentionSubtitle}
         action={
-          <Link href="/alerts" className="whitespace-nowrap text-2xs text-navy hover:underline">
-            All {formatNumber(total)} →
+          <Link
+            href="/alerts"
+            className="whitespace-nowrap text-2xs text-navy hover:underline"
+          >
+            {fill(d.dash.allOf, { count: formatNumber(total) })}
           </Link>
         }
       />
       {alerts.length === 0 ? (
-        <EmptyState title="Nothing awaiting review" body={emptyBody} />
+        <EmptyState title={d.dash.nothingAwaitingTitle} body={emptyBody} />
       ) : (
         <ul className="divide-y divide-line/60">
           {alerts.map((a) => (
             <li key={a.id} className="px-4 py-2.5 hover:bg-paper">
               <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                 <SeverityBadge severity={a.severity}>
-                  {a.severity.toLowerCase()}
+                  {d.severity[a.severity]}
                 </SeverityBadge>
                 <span className="tnum rounded border border-line bg-paper px-1.5 py-0.5 text-2xs font-semibold text-ink">
                   {a.score}
@@ -83,11 +96,18 @@ export function AlertQueuePreview({
                   href={`/alerts/${a.id}`}
                   className="text-sm font-medium text-navy hover:underline"
                 >
-                  {ALERT_TYPE_LABELS[a.type]}
+                  {d.alertType[a.type]}
                 </Link>
-                <span className="text-sm text-ink">· {a.work.title}</span>
+                {/* The work's own recorded title — data, not interface copy,
+                    so it is never translated. Marked for the i18n sweep. */}
+                <span className="text-sm text-ink" data-record-text>
+                  · {a.work.title}
+                </span>
               </div>
-              <p className="mt-0.5 max-w-4xl text-2xs leading-relaxed text-slate">
+              <p
+                data-detector-text
+                className="mt-0.5 max-w-4xl text-2xs leading-relaxed text-slate"
+              >
                 {a.reason}
               </p>
               <div className="mt-0.5 flex flex-wrap gap-x-3 text-2xs text-slate">
@@ -95,7 +115,7 @@ export function AlertQueuePreview({
                 <span>
                   {a.work.district.name}, {a.work.district.state.name}
                 </span>
-                <span>{a.work.ia?.name ?? "No agency designated"}</span>
+                <span>{a.work.ia?.name ?? d.dash.noAgencyDesignated}</span>
               </div>
             </li>
           ))}
@@ -128,6 +148,7 @@ export function ComparisonTable({
     render: (row: RankedRow) => React.ReactNode;
   };
 }) {
+  const d = tr();
   const sorted = [...rows].sort(
     (a, b) => b.criticalAlerts - a.criticalAlerts || b.alerts - a.alerts,
   );
@@ -137,8 +158,10 @@ export function ComparisonTable({
       <CardHeader title={title} subtitle={subtitle} />
       {sorted.length === 0 ? (
         <EmptyState
-          title="Nothing to compare"
-          body={`No ${unitLabel.toLowerCase()} in your jurisdiction has any works recorded.`}
+          title={d.dash.nothingToCompareTitle}
+          body={fill(d.dash.nothingToCompareBody, {
+            unit: unitLabel.toLowerCase(),
+          })}
         />
       ) : (
         <div className="overflow-x-auto">
@@ -151,12 +174,24 @@ export function ComparisonTable({
                 <th scope="col" className="px-4 py-2 text-left font-medium">
                   {unitLabel}
                 </th>
-                <th scope="col" className="px-4 py-2 text-right font-medium">Works</th>
-                <th scope="col" className="px-4 py-2 text-right font-medium">Sanctioned</th>
-                <th scope="col" className="px-4 py-2 text-right font-medium">Completed</th>
-                <th scope="col" className="px-4 py-2 text-right font-medium">Past one year</th>
-                <th scope="col" className="px-4 py-2 text-right font-medium">Alerts</th>
-                <th scope="col" className="px-4 py-2 text-right font-medium">Critical</th>
+                <th scope="col" className="px-4 py-2 text-right font-medium">
+                  {d.table.works}
+                </th>
+                <th scope="col" className="px-4 py-2 text-right font-medium">
+                  {d.table.sanctioned}
+                </th>
+                <th scope="col" className="px-4 py-2 text-right font-medium">
+                  {d.table.completed}
+                </th>
+                <th scope="col" className="px-4 py-2 text-right font-medium">
+                  {d.dash.pastOneYearCol}
+                </th>
+                <th scope="col" className="px-4 py-2 text-right font-medium">
+                  {d.table.alerts}
+                </th>
+                <th scope="col" className="px-4 py-2 text-right font-medium">
+                  {d.table.critical}
+                </th>
                 {extraColumn ? (
                   <th scope="col" className="px-4 py-2 text-right font-medium">
                     {extraColumn.header}
@@ -166,11 +201,19 @@ export function ComparisonTable({
             </thead>
             <tbody>
               {sorted.map((r) => (
-                <tr key={r.id} className="border-b border-line/60 last:border-0 hover:bg-paper">
-                  <th scope="row" className="px-4 py-2 text-left font-medium text-ink">
+                <tr
+                  key={r.id}
+                  className="border-b border-line/60 last:border-0 hover:bg-paper"
+                >
+                  <th
+                    scope="row"
+                    className="px-4 py-2 text-left font-medium text-ink"
+                  >
                     {r.name}
                     {r.subtitle ? (
-                      <div className="text-2xs font-normal text-slate">{r.subtitle}</div>
+                      <div className="text-2xs font-normal text-slate">
+                        {r.subtitle}
+                      </div>
                     ) : null}
                   </th>
                   <td className="tnum px-4 py-2 text-right text-ink">
@@ -219,29 +262,36 @@ export function StagePipeline({
   stages: { status: keyof typeof WORK_STATUS_LABELS; count: number }[];
   total: number;
 }) {
+  const d = tr();
   return (
     <Card>
-      <CardHeader
-        title="Works by stage"
-        subtitle="The eSAKSHI lifecycle, from an MP's recommendation to the agency marking the work complete."
-      />
+      <CardHeader title={d.dash.stagesTitle} subtitle={d.dash.stagesSubtitle} />
       <table className="w-full text-sm">
-        <caption className="sr-only">Count of works at each stage</caption>
+        <caption className="sr-only">{d.dash.stagesCaption}</caption>
         <thead>
           <tr className="border-b border-line text-2xs uppercase tracking-wide text-slate">
-            <th scope="col" className="px-4 py-2 text-left font-medium">Stage</th>
-            <th scope="col" className="px-4 py-2 text-right font-medium">Works</th>
-            <th scope="col" className="px-4 py-2 text-right font-medium">Share</th>
+            <th scope="col" className="px-4 py-2 text-left font-medium">
+              {d.table.stage}
+            </th>
+            <th scope="col" className="px-4 py-2 text-right font-medium">
+              {d.table.works}
+            </th>
+            <th scope="col" className="px-4 py-2 text-right font-medium">
+              {d.table.share}
+            </th>
           </tr>
         </thead>
         <tbody>
           {stages.map((s) => (
-            <tr key={s.status} className="border-b border-line/60 last:border-0">
+            <tr
+              key={s.status}
+              className="border-b border-line/60 last:border-0"
+            >
               <td className="px-4 py-2 text-ink">
-                {WORK_STATUS_LABELS[s.status]}
+                {d.workStatus[s.status]}
                 {s.status === "COMPLETED_UNMARKED" ? (
                   <span className="ml-2 text-2xs text-slate">
-                    not shown as completed publicly
+                    {d.workStatus.notShownPublicly}
                   </span>
                 ) : null}
               </td>
@@ -273,26 +323,33 @@ export function DelayWatchlist({
     delayRisk: { probability: number; band: string } | null;
   }[];
 }) {
+  const d = tr();
   return (
     <Card>
       <CardHeader
-        title="Watch list"
-        subtitle="Running works the model expects to miss the one-year mark. A forecast, not a finding — the useful response is a call to the agency."
+        title={d.dash.watchlistTitle}
+        subtitle={d.dash.watchlistSubtitle}
         action={
-          <Link href="/forecast" className="whitespace-nowrap text-2xs text-navy hover:underline">
-            All forecasts →
+          <Link
+            href="/forecast"
+            className="whitespace-nowrap text-2xs text-navy hover:underline"
+          >
+            {d.common.allForecasts} →
           </Link>
         }
       />
       {works.length === 0 ? (
         <EmptyState
-          title="No works flagged"
-          body="Either nothing in your jurisdiction is at elevated risk, or the model service has not been run — forecasts need `npm run detect:ml`, which the rest of the platform does not."
+          title={d.dash.watchlistEmptyTitle}
+          body={d.dash.watchlistEmptyBody}
         />
       ) : (
         <ul className="divide-y divide-line/60">
           {works.map((w) => (
-            <li key={w.id} className="flex flex-wrap items-baseline gap-x-3 gap-y-1 px-4 py-2">
+            <li
+              key={w.id}
+              className="flex flex-wrap items-baseline gap-x-3 gap-y-1 px-4 py-2"
+            >
               <Link
                 href={`/works/${w.id}`}
                 className="text-sm font-medium text-navy hover:underline"
@@ -304,8 +361,12 @@ export function DelayWatchlist({
               </span>
               <DelayRiskBadge band={w.delayRisk?.band ?? "LOW"} />
               <span className="w-full text-2xs text-slate">
-                {w.district.name} · {w.ia?.name ?? "No agency"} · {w.progressPct}% done ·
-                due {formatDate(w.expectedCompletionAt)}
+                {fill(d.dash.watchlistMeta, {
+                  district: w.district.name,
+                  agency: w.ia?.name ?? d.dash.noAgency,
+                  progress: w.progressPct,
+                  due: formatDate(w.expectedCompletionAt),
+                })}
               </span>
             </li>
           ))}

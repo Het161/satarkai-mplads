@@ -1,5 +1,4 @@
 import { t } from "@/lib/i18n";
-import { DATA_COVERAGE_NOTE } from "@/lib/scheme";
 
 /**
  * Two notices that must never be quietly dropped:
@@ -31,7 +30,7 @@ export function CoverageGapNotice() {
   return (
     <p className="rounded border border-line bg-paper px-3 py-2 text-2xs leading-relaxed text-slate">
       <span className="font-medium text-ink">{dict.notice.coverageTitle}</span>{" "}
-      {DATA_COVERAGE_NOTE}
+      {dict.notice.coverage}
     </p>
   );
 }

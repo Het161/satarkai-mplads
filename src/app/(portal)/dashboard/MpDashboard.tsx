@@ -12,8 +12,9 @@ import {
 } from "@/lib/dashboard";
 import { prisma } from "@/lib/db";
 import { formatDate, formatINR, formatNumber, formatPct } from "@/lib/format";
+import { fill, t as tr } from "@/lib/i18n";
 import { scoped, type Scope } from "@/lib/scope";
-import { COMPLETION_WINDOW_DAYS, WORK_STATUS_LABELS } from "@/lib/scheme";
+import { COMPLETION_WINDOW_DAYS } from "@/lib/scheme";
 
 /**
  * Member of Parliament — their own recommended works.
@@ -35,7 +36,10 @@ export async function MpDashboard({
   scope: Scope;
   mp: { id: string; name: string; constituency: string; house: string };
 }) {
-  const overdueCutoff = new Date(Date.now() - COMPLETION_WINDOW_DAYS * 86_400_000);
+  const d = tr();
+  const overdueCutoff = new Date(
+    Date.now() - COMPLETION_WINDOW_DAYS * 86_400_000,
+  );
 
   const [kpis, years, categories, stages, delayed, recent] = await Promise.all([
     schemeKpis(scope),
@@ -64,93 +68,135 @@ export async function MpDashboard({
   // nothing sanctioned against it yet makes an empty chart that says nothing.
   // Show the most recent year that has actually moved.
   const currentYear =
-    [...years].reverse().find((y) => y.sanctioned > 0) ?? years[years.length - 1];
+    [...years].reverse().find((y) => y.sanctioned > 0) ??
+    years[years.length - 1];
   const totalAuthorised = years.reduce((s, y) => s + y.authorised, 0);
 
   return (
     <div className="space-y-5">
       <DashboardHeading
-        title={`${mp.constituency}`}
-        subtitle={`Works recommended by ${mp.name} under MPLADS, and where each one has reached. ${mp.house === "RS" ? "Rajya Sabha" : "Lok Sabha"}.`}
-        badge="Hon'ble Member of Parliament"
+        title={mp.constituency}
+        subtitle={fill(d.dash.mpSubtitle, {
+          mp: mp.name,
+          house: mp.house === "RS" ? d.dash.houseRS : d.dash.houseLS,
+        })}
+        badge={d.role.MP}
       />
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <KpiCard
-          label="Works recommended"
+          label={d.dash.kpiWorksRecommended}
           value={formatNumber(kpis.works)}
-          hint={`${formatNumber(kpis.completed)} completed`}
+          hint={fill(d.dash.hintCompleted, {
+            count: formatNumber(kpis.completed),
+          })}
         />
         <KpiCard
-          label="Entitlement authorised"
+          label={d.dash.kpiEntitlementAuthorised}
           value={formatINR(totalAuthorised)}
-          hint={`across ${years.length} financial years`}
+          hint={fill(d.dash.hintAcrossYears, { count: years.length })}
         />
         <KpiCard
-          label="Recommended against it"
+          label={d.dash.kpiRecommendedAgainst}
           value={formatINR(kpis.recommended)}
-          hint={formatPct(
-            totalAuthorised > 0 ? kpis.recommended / totalAuthorised : 0,
-            0,
-          ) + " of entitlement"}
+          hint={fill(d.dash.hintOfEntitlement, {
+            pct: formatPct(
+              totalAuthorised > 0 ? kpis.recommended / totalAuthorised : 0,
+              0,
+            ),
+          })}
         />
         <KpiCard
-          label="Reached vendors"
+          label={d.dash.kpiReachedVendors}
           value={formatINR(kpis.released)}
-          hint="actually paid out for work done"
+          hint={d.dash.hintActuallyPaidOut}
         />
       </div>
 
       <div className="grid items-start gap-4 lg:grid-cols-[1fr_1fr]">
         <Card>
           <CardHeader
-            title={`Where the money stands${currentYear ? ` — FY ${currentYear.financialYear}` : ""}`}
-            subtitle="Each step is a smaller figure than the one before it, and the gaps are where money is waiting rather than working."
+            title={
+              currentYear
+                ? fill(d.dash.moneyStandsTitleFy, {
+                    fy: currentYear.financialYear,
+                  })
+                : d.dash.moneyStandsTitle
+            }
+            subtitle={d.dash.moneyStandsSubtitle}
           />
           {currentYear ? (
             <FundFlowBars
+              labels={{
+                showChart: d.common.showChart,
+                showFigures: d.common.showFigures,
+                month: d.table.month,
+              }}
+              columnLabels={{ stage: d.table.stage, amount: d.table.amount }}
               data={[
-                { label: "Entitlement authorised", value: currentYear.authorised },
-                { label: "You recommended", value: currentYear.recommended },
-                { label: "District sanctioned", value: currentYear.sanctioned },
-                { label: "Paid to vendors", value: currentYear.spent },
+                {
+                  label: d.dash.flowEntitlement,
+                  value: currentYear.authorised,
+                },
+                {
+                  label: d.dash.flowRecommended,
+                  value: currentYear.recommended,
+                },
+                { label: d.dash.flowSanctioned, value: currentYear.sanctioned },
+                { label: d.dash.flowPaid, value: currentYear.spent },
               ]}
               format="inr"
             />
           ) : (
             <EmptyState
-              title="No entitlement on record"
-              body="No annual entitlement has been authorised for this Member in the period covered by the portal."
+              title={d.dash.noEntitlementTitle}
+              body={d.dash.noEntitlementBody}
             />
           )}
         </Card>
 
         <Card>
           <CardHeader
-            title="Year by year"
-            subtitle="Entitlement authorised against what was recommended, sanctioned and paid."
+            title={d.dash.yearByYearTitle}
+            subtitle={d.dash.yearByYearSubtitle}
           />
           <div className="overflow-x-auto">
             <table className="w-full min-w-[520px] text-sm">
-              <caption className="sr-only">
-                Entitlement and utilisation by financial year
-              </caption>
+              <caption className="sr-only">{d.dash.yearByYearCaption}</caption>
               <thead>
                 <tr className="border-b border-line text-2xs uppercase tracking-wide text-slate">
-                  <th scope="col" className="px-4 py-2 text-left font-medium">Year</th>
-                  <th scope="col" className="px-4 py-2 text-right font-medium">Entitlement</th>
-                  <th scope="col" className="px-4 py-2 text-right font-medium">Recommended</th>
-                  <th scope="col" className="px-4 py-2 text-right font-medium">Sanctioned</th>
-                  <th scope="col" className="px-4 py-2 text-right font-medium">Paid</th>
-                  <th scope="col" className="px-4 py-2 text-right font-medium">Works</th>
+                  <th scope="col" className="px-4 py-2 text-left font-medium">
+                    {d.table.year}
+                  </th>
+                  <th scope="col" className="px-4 py-2 text-right font-medium">
+                    {d.table.entitlement}
+                  </th>
+                  <th scope="col" className="px-4 py-2 text-right font-medium">
+                    {d.table.recommended}
+                  </th>
+                  <th scope="col" className="px-4 py-2 text-right font-medium">
+                    {d.table.sanctioned}
+                  </th>
+                  <th scope="col" className="px-4 py-2 text-right font-medium">
+                    {d.table.paid}
+                  </th>
+                  <th scope="col" className="px-4 py-2 text-right font-medium">
+                    {d.table.works}
+                  </th>
                 </tr>
               </thead>
               <tbody>
                 {years.map((y) => {
                   const over = y.recommended > y.authorised;
                   return (
-                    <tr key={y.financialYear} className="border-b border-line/60 last:border-0">
-                      <th scope="row" className="px-4 py-2 text-left font-medium text-ink">
+                    <tr
+                      key={y.financialYear}
+                      className="border-b border-line/60 last:border-0"
+                    >
+                      <th
+                        scope="row"
+                        className="px-4 py-2 text-left font-medium text-ink"
+                      >
                         {y.financialYear}
                       </th>
                       <td className="tnum px-4 py-2 text-right text-slate">
@@ -182,9 +228,7 @@ export async function MpDashboard({
           </div>
           {years.some((y) => y.recommended > y.authorised) ? (
             <p className="border-t border-line bg-severity-critical/5 px-4 py-2 text-2xs text-severity-critical">
-              A year shown in red has recommendations totalling more than the
-              entitlement authorised for it. That needs reconciling with the
-              district authority.
+              {d.dash.overRecommendedNote}
             </p>
           ) : null}
         </Card>
@@ -193,13 +237,15 @@ export async function MpDashboard({
       <div className="grid items-start gap-4 lg:grid-cols-[1.2fr_1fr]">
         <Card>
           <CardHeader
-            title="Works running late"
-            subtitle={`Sanctioned more than ${COMPLETION_WINDOW_DAYS} days ago and still not marked complete by the implementing agency.`}
+            title={d.dash.lateTitle}
+            subtitle={fill(d.dash.lateSubtitle, {
+              days: COMPLETION_WINDOW_DAYS,
+            })}
           />
           {delayed.length === 0 ? (
             <EmptyState
-              title="Nothing running late"
-              body="Every work recommended from this constituency is either inside the one-year window or already marked complete."
+              title={d.dash.lateEmptyTitle}
+              body={d.dash.lateEmptyBody}
             />
           ) : (
             <ul className="divide-y divide-line/60">
@@ -217,8 +263,12 @@ export async function MpDashboard({
                       {w.title}
                     </Link>
                     <div className="text-2xs text-slate">
-                      {days} days past the one-year mark · {w.progressPct}% done ·{" "}
-                      {w.ia?.name ?? "no agency designated"} · {w.district.name}
+                      {fill(d.dash.lateMeta, {
+                        days,
+                        progress: w.progressPct,
+                        agency: w.ia?.name ?? d.dash.noAgencyDesignatedLower,
+                        district: w.district.name,
+                      })}
                     </div>
                   </li>
                 );
@@ -229,23 +279,34 @@ export async function MpDashboard({
 
         <Card>
           <CardHeader
-            title="What the works are for"
-            subtitle="Recommended amount by category of asset."
+            title={d.dash.categoriesTitle}
+            subtitle={d.dash.categoriesSubtitle}
           />
           <table className="w-full text-sm">
-            <caption className="sr-only">Recommended amount by category</caption>
+            <caption className="sr-only">{d.dash.categoriesCaption}</caption>
             <thead>
               <tr className="border-b border-line text-2xs uppercase tracking-wide text-slate">
-                <th scope="col" className="px-4 py-2 text-left font-medium">Category</th>
-                <th scope="col" className="px-4 py-2 text-right font-medium">Works</th>
-                <th scope="col" className="px-4 py-2 text-right font-medium">Amount</th>
+                <th scope="col" className="px-4 py-2 text-left font-medium">
+                  {d.table.category}
+                </th>
+                <th scope="col" className="px-4 py-2 text-right font-medium">
+                  {d.table.works}
+                </th>
+                <th scope="col" className="px-4 py-2 text-right font-medium">
+                  {d.table.amount}
+                </th>
               </tr>
             </thead>
             <tbody>
               {categories.map((c) => (
-                <tr key={c.category} className="border-b border-line/60 last:border-0">
+                <tr
+                  key={c.category}
+                  className="border-b border-line/60 last:border-0"
+                >
                   <td className="px-4 py-2 text-ink">{c.category}</td>
-                  <td className="tnum px-4 py-2 text-right text-slate">{c.works}</td>
+                  <td className="tnum px-4 py-2 text-right text-slate">
+                    {c.works}
+                  </td>
                   <td className="tnum px-4 py-2 text-right text-ink">
                     {formatINR(c.value)}
                   </td>
@@ -259,8 +320,8 @@ export async function MpDashboard({
       <div className="grid items-start gap-4 lg:grid-cols-2">
         <Card>
           <CardHeader
-            title="Most recent recommendations"
-            subtitle="Newest first."
+            title={d.dash.recentTitle}
+            subtitle={d.dash.recentSubtitle}
           />
           <ul className="divide-y divide-line/60">
             {recent.map((w) => (
@@ -272,8 +333,8 @@ export async function MpDashboard({
                   {w.title}
                 </Link>
                 <div className="text-2xs text-slate">
-                  {formatDate(w.recommendedAt)} · {formatINR(w.recommendedAmount)} ·{" "}
-                  {WORK_STATUS_LABELS[w.status]}
+                  {formatDate(w.recommendedAt)} ·{" "}
+                  {formatINR(w.recommendedAmount)} · {d.workStatus[w.status]}
                 </div>
               </li>
             ))}
@@ -282,23 +343,28 @@ export async function MpDashboard({
 
         <Card>
           <CardHeader
-            title="Where the works have reached"
-            subtitle="Every recommendation passes through these stages. A work only counts as completed once the agency marks it so."
+            title={d.dash.reachedTitle}
+            subtitle={d.dash.reachedSubtitle}
           />
           <table className="w-full text-sm">
-            <caption className="sr-only">Works by stage</caption>
+            <caption className="sr-only">{d.dash.stagesCaption}</caption>
             <tbody>
               {stages.map((s) => (
-                <tr key={s.status} className="border-b border-line/60 last:border-0">
+                <tr
+                  key={s.status}
+                  className="border-b border-line/60 last:border-0"
+                >
                   <td className="px-4 py-2 text-ink">
-                    {WORK_STATUS_LABELS[s.status]}
+                    {d.workStatus[s.status]}
                     {s.status === "COMPLETED_UNMARKED" ? (
                       <span className="ml-2 text-2xs text-slate">
-                        finished, waiting on the agency to record it
+                        {d.dash.awaitingAgencyRecord}
                       </span>
                     ) : null}
                   </td>
-                  <td className="tnum px-4 py-2 text-right text-ink">{s.count}</td>
+                  <td className="tnum px-4 py-2 text-right text-ink">
+                    {s.count}
+                  </td>
                 </tr>
               ))}
             </tbody>

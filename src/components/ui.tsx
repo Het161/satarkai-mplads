@@ -1,6 +1,5 @@
 import clsx from "clsx";
 import type { ReactNode } from "react";
-
 /* --------------------------------------------------------------------------
  * "Audit" primitives. Dense, quiet, data-first.
  * Severity colour appears only on risk. Never decorative.
@@ -62,7 +61,7 @@ export function KpiCard({
     <div className="flex h-full flex-col rounded border border-line bg-white px-4 py-3 shadow-card">
       {/* Two lines reserved for the label so the figures across a row of cards
           share a baseline even when one label wraps. */}
-      <div className="min-h-[2rem] text-2xs font-medium uppercase leading-4 tracking-wide text-slate">
+      <div className="min-h-[2.25rem] text-2xs font-medium uppercase leading-[1.125rem] tracking-wide text-slate">
         {label}
       </div>
       <div
@@ -92,7 +91,8 @@ export function KpiCard({
  * critical 5.53, high 5.30, medium 5.30, low 5.38, info 5.59.
  */
 const SEVERITY_STYLES = {
-  CRITICAL: "border-severity-critical/30 bg-severity-critical/10 text-severity-critical",
+  CRITICAL:
+    "border-severity-critical/30 bg-severity-critical/10 text-severity-critical",
   HIGH: "border-severity-high/30 bg-severity-high/10 text-[#9A4A04]",
   MEDIUM: "border-severity-medium/40 bg-severity-medium/10 text-[#7A6408]",
   LOW: "border-severity-low/30 bg-severity-low/10 text-[#196B42]",
@@ -127,43 +127,11 @@ export function Tag({ children }: { children: ReactNode }) {
   );
 }
 
-export function EmptyState({
-  title,
-  body,
-}: {
-  title: string;
-  body: string;
-}) {
+export function EmptyState({ title, body }: { title: string; body: string }) {
   return (
     <div className="px-4 py-10 text-center">
       <p className="text-sm font-medium text-ink">{title}</p>
       <p className="mx-auto mt-1 max-w-md text-2xs text-slate">{body}</p>
     </div>
-  );
-}
-
-/**
- * Data provenance label. Every figure in this platform carries its source and
- * date; a government dashboard that cannot say where a number came from is not
- * fit for decisions.
- */
-export function ProvenanceNote({
-  kind,
-  name,
-  fetchedAt,
-  note,
-}: {
-  kind: "REAL" | "SYNTHETIC";
-  name: string;
-  fetchedAt: string;
-  note?: string;
-}) {
-  return (
-    <p className="text-2xs leading-relaxed text-slate">
-      <span className="font-medium text-ink">Source:</span> {name} ·{" "}
-      {kind === "SYNTHETIC" ? "synthetic demonstration data" : "official record"} ·
-      as of {fetchedAt}
-      {note ? <> · {note}</> : null}
-    </p>
   );
 }

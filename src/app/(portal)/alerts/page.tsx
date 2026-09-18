@@ -3,13 +3,20 @@ import type { Metadata } from "next";
 import type { AlertState, AlertType, Severity } from "@prisma/client";
 
 import { HumanDecidesNotice } from "@/components/DataNotices";
-import { Card, CardHeader, EmptyState, KpiCard, SeverityBadge, Tag } from "@/components/ui";
+import {
+  Card,
+  CardHeader,
+  EmptyState,
+  KpiCard,
+  SeverityBadge,
+  Tag,
+} from "@/components/ui";
 import { requireSession } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { formatDate, formatINR, formatNumber } from "@/lib/format";
 import { scoped } from "@/lib/scope";
 import { ALERT_TYPE_LABELS } from "@/lib/scheme";
-import { t } from "@/lib/i18n";
+import { fill, t } from "@/lib/i18n";
 
 export const metadata: Metadata = { title: "Alert queue" };
 export const dynamic = "force-dynamic";
@@ -84,7 +91,10 @@ export default async function AlertsPage({
   if (searchParams.type && searchParams.type in ALERT_TYPE_LABELS) {
     filters.type = searchParams.type as AlertType;
   }
-  if (searchParams.severity && SEVERITIES.includes(searchParams.severity as Severity)) {
+  if (
+    searchParams.severity &&
+    SEVERITIES.includes(searchParams.severity as Severity)
+  ) {
     filters.severity = searchParams.severity as Severity;
   }
   if (searchParams.state && STATES.includes(searchParams.state as AlertState)) {
@@ -102,13 +112,21 @@ export default async function AlertsPage({
         take: PAGE_SIZE,
         include: {
           work: {
-            include: { district: { include: { state: true } }, mp: true, ia: true },
+            include: {
+              district: { include: { state: true } },
+              mp: true,
+              ia: true,
+            },
           },
         },
       }),
       prisma.alert.count({ where }),
       prisma.alert.groupBy({ by: ["type"], where: scope.alert, _count: true }),
-      prisma.alert.groupBy({ by: ["severity"], where: scope.alert, _count: true }),
+      prisma.alert.groupBy({
+        by: ["severity"],
+        where: scope.alert,
+        _count: true,
+      }),
       prisma.alert.count({ where: scoped(scope.alert, { state: "OPEN" }) }),
       prisma.work.aggregate({
         where: scoped(scope.work, { alerts: { some: {} } }),
@@ -130,8 +148,9 @@ export default async function AlertsPage({
             {dict.common.alertQueue}
           </h1>
           <p className="mt-0.5 text-2xs text-slate">
-            {dict.scope[scope.label]} · highest priority first. Each alert carries the rule
-            it broke and the records behind it.
+            {fill(dict.common.alertQueueSubtitle, {
+              scope: dict.scope[scope.label],
+            })}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -141,12 +160,17 @@ export default async function AlertsPage({
           >
             {dict.common.exportCsv}
           </a>
-          <Tag>{dict.common.page} {page} {dict.common.of} {pages}</Tag>
+          <Tag>
+            {dict.common.page} {page} {dict.common.of} {pages}
+          </Tag>
         </div>
       </div>
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <KpiCard label={dict.kpi.alertsInScope} value={formatNumber(totalInScope)} />
+        <KpiCard
+          label={dict.kpi.alertsInScope}
+          value={formatNumber(totalInScope)}
+        />
         <KpiCard
           label={dict.table.critical}
           value={formatNumber(critical)}
@@ -174,7 +198,13 @@ export default async function AlertsPage({
         />
         <div className="space-y-2 px-4 py-3">
           <FilterRow label={dict.table.type}>
-            <Filter label={dict.common.all} param="type" value={null} current={searchParams.type} search={searchParams} />
+            <Filter
+              label={dict.common.all}
+              param="type"
+              value={null}
+              current={searchParams.type}
+              search={searchParams}
+            />
             {(Object.keys(ALERT_TYPE_LABELS) as AlertType[])
               .filter((t) => typeCounts.has(t))
               .map((t) => (
@@ -190,7 +220,13 @@ export default async function AlertsPage({
           </FilterRow>
 
           <FilterRow label={dict.table.severity}>
-            <Filter label={dict.common.all} param="severity" value={null} current={searchParams.severity} search={searchParams} />
+            <Filter
+              label={dict.common.all}
+              param="severity"
+              value={null}
+              current={searchParams.severity}
+              search={searchParams}
+            />
             {SEVERITIES.filter((s) => sevCounts.has(s)).map((s) => (
               <Filter
                 key={s}
@@ -204,7 +240,13 @@ export default async function AlertsPage({
           </FilterRow>
 
           <FilterRow label={dict.table.status}>
-            <Filter label={dict.common.all} param="state" value={null} current={searchParams.state} search={searchParams} />
+            <Filter
+              label={dict.common.all}
+              param="state"
+              value={null}
+              current={searchParams.state}
+              search={searchParams}
+            />
             {STATES.map((s) => (
               <Filter
                 key={s}
@@ -248,10 +290,15 @@ export default async function AlertsPage({
                     {dict.alertType[a.type]}
                   </Link>
                   <span className="text-sm text-ink">· {a.work.title}</span>
-                  {a.state !== "OPEN" ? <Tag>{dict.alertState[a.state]}</Tag> : null}
+                  {a.state !== "OPEN" ? (
+                    <Tag>{dict.alertState[a.state]}</Tag>
+                  ) : null}
                 </div>
 
-                <p className="mt-1 max-w-4xl text-2xs leading-relaxed text-slate">
+                <p
+                  data-detector-text
+                  className="mt-1 max-w-4xl text-2xs leading-relaxed text-slate"
+                >
                   {a.reason}
                 </p>
 
@@ -270,7 +317,12 @@ export default async function AlertsPage({
         )}
 
         {pages > 1 ? (
-          <Pagination page={page} pages={pages} total={total} search={searchParams} />
+          <Pagination
+            page={page}
+            pages={pages}
+            total={total}
+            search={searchParams}
+          />
         ) : null}
       </Card>
     </div>
@@ -314,28 +366,31 @@ function Pagination({
     return `/alerts?${qs.toString()}`;
   };
 
+  const dict = t();
+
   return (
     <nav
-      aria-label="Pagination"
+      aria-label={dict.common.pagination}
       className="flex items-center justify-between border-t border-line px-4 py-2 text-2xs"
     >
       {page > 1 ? (
         <Link href={href(page - 1)} className="text-navy hover:underline">
-          ← Previous
+          ← {dict.common.previous}
         </Link>
       ) : (
-        <span className="text-slate/50">← Previous</span>
+        <span className="text-slate/50">← {dict.common.previous}</span>
       )}
       <span className="text-slate">
         {formatNumber((page - 1) * PAGE_SIZE + 1)}–
-        {formatNumber(Math.min(page * PAGE_SIZE, total))} of {formatNumber(total)}
+        {formatNumber(Math.min(page * PAGE_SIZE, total))} {dict.common.of}{" "}
+        {formatNumber(total)}
       </span>
       {page < pages ? (
         <Link href={href(page + 1)} className="text-navy hover:underline">
-          Next →
+          {dict.common.next} →
         </Link>
       ) : (
-        <span className="text-slate/50">Next →</span>
+        <span className="text-slate/50">{dict.common.next} →</span>
       )}
     </nav>
   );

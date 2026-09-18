@@ -9,7 +9,8 @@ import { requireSession } from "@/lib/auth";
 import { scoped } from "@/lib/scope";
 import { prisma } from "@/lib/db";
 import { daysBetween, formatDate, formatINR, money } from "@/lib/format";
-import { COMPLETION_WINDOW_DAYS, WORK_STATUS_LABELS } from "@/lib/scheme";
+import { fill, t as tr } from "@/lib/i18n";
+import { COMPLETION_WINDOW_DAYS } from "@/lib/scheme";
 
 export const metadata: Metadata = { title: "Work detail" };
 export const dynamic = "force-dynamic";
@@ -20,6 +21,7 @@ export default async function WorkDetailPage({
   params: { id: string };
 }) {
   const { scope } = await requireSession();
+  const d = tr();
 
   // The jurisdiction filter sits in the WHERE clause alongside the id. A work
   // outside the user's jurisdiction is not "found and refused" — it is simply
@@ -50,45 +52,64 @@ export default async function WorkDetailPage({
     <div className="space-y-4">
       <div>
         <Link href="/works" className="text-2xs text-navy hover:underline">
-          ← All works
+          {d.workDetail.back}
         </Link>
         <h1 className="mt-1 text-lg font-semibold tracking-tight text-ink">
           {work.title}
         </h1>
         <p className="mt-0.5 flex flex-wrap items-center gap-2 text-2xs text-slate">
           <span>{work.workCode}</span>
-          <Tag>{WORK_STATUS_LABELS[work.status]}</Tag>
+          <Tag>{d.workStatus[work.status]}</Tag>
           <Tag>{work.category}</Tag>
-          <Tag>FY {work.financialYear}</Tag>
+          <Tag>{fill(d.workDetail.fyTag, { fy: work.financialYear })}</Tag>
         </p>
       </div>
 
       <div className="grid gap-4 lg:grid-cols-[1fr_1.4fr]">
         <Card>
-          <CardHeader title="Particulars" />
+          <CardHeader title={d.workDetail.particulars} />
           <dl className="divide-y divide-line/60 text-sm">
             {[
-              ["Work type", work.workType],
-              ["District", `${work.district.name}, ${work.district.state.name}`],
-              ["Recommended by", `${work.mp.name} · ${work.mp.constituency}`],
-              ["Implementing agency", work.ia?.name ?? "Not yet designated"],
-              ["Recommended on", formatDate(work.recommendedAt)],
-              ["Recommended amount", formatINR(work.recommendedAmount)],
-              ["Sanctioned on", formatDate(work.sanctionedAt)],
-              ["Sanctioned amount", work.sanctionedAmount ? formatINR(work.sanctionedAmount) : "—"],
+              [d.workDetail.workType, work.workType],
               [
-                "Due for completion",
+                d.table.district,
+                `${work.district.name}, ${work.district.state.name}`,
+              ],
+              [
+                d.table.recommendedBy,
+                `${work.mp.name} · ${work.mp.constituency}`,
+              ],
+              [
+                d.workDetail.implementingAgency,
+                work.ia?.name ?? d.workDetail.notYetDesignated,
+              ],
+              [d.workDetail.recommendedOn, formatDate(work.recommendedAt)],
+              [
+                d.workDetail.recommendedAmount,
+                formatINR(work.recommendedAmount),
+              ],
+              [d.workDetail.sanctionedOn, formatDate(work.sanctionedAt)],
+              [
+                d.workDetail.sanctionedAmount,
+                work.sanctionedAmount ? formatINR(work.sanctionedAmount) : "—",
+              ],
+              [
+                d.workDetail.dueForCompletion,
                 work.expectedCompletionAt
-                  ? `${formatDate(work.expectedCompletionAt)} (one year from sanction)`
+                  ? fill(d.workDetail.dueValue, {
+                      date: formatDate(work.expectedCompletionAt),
+                    })
                   : "—",
               ],
-              ["Recorded progress", `${work.progressPct}%`],
-              ["Complete on the ground", formatDate(work.completedAt)],
-              ["Marked complete by agency", formatDate(work.markedCompleteAt)],
-              ["Released to vendors", formatINR(paid)],
+              [d.workDetail.recordedProgress, `${work.progressPct}%`],
+              [d.workDetail.completeOnGround, formatDate(work.completedAt)],
+              [d.workDetail.markedByAgency, formatDate(work.markedCompleteAt)],
+              [d.workDetail.releasedToVendors, formatINR(paid)],
               [
-                "Released as share of sanction",
-                sanctioned > 0 ? `${Math.round((paid / sanctioned) * 100)}%` : "—",
+                d.workDetail.releasedShare,
+                sanctioned > 0
+                  ? `${Math.round((paid / sanctioned) * 100)}%`
+                  : "—",
               ],
             ].map(([label, value]) => (
               <div key={label} className="flex justify-between gap-4 px-4 py-2">
@@ -99,8 +120,7 @@ export default async function WorkDetailPage({
           </dl>
           {overdueDays !== null && overdueDays > 0 ? (
             <p className="border-t border-line bg-severity-critical/5 px-4 py-2 text-2xs text-severity-critical">
-              {overdueDays} days past the scheme&apos;s one-year completion
-              guideline, and not yet marked complete by the implementing agency.
+              {fill(d.workDetail.overdueNote, { days: overdueDays })}
             </p>
           ) : null}
         </Card>

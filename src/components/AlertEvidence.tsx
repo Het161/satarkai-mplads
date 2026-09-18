@@ -1,5 +1,6 @@
 import { Card, CardHeader } from "@/components/ui";
 import type { AlertEvidence } from "@/lib/detectors/types";
+import { t as tr } from "@/lib/i18n";
 
 /**
  * Renders the evidence behind an alert.
@@ -11,10 +12,15 @@ import type { AlertEvidence } from "@/lib/detectors/types";
  */
 
 export function EvidencePanels({ evidence }: { evidence: AlertEvidence }) {
+  const d = tr();
+  // The rule sentence, the fact labels, the record rows and the scoring basis
+  // are all composed by the detectors and stored on the Alert row as finished
+  // English. Marked so the i18n sweep in e2e/i18n.spec.ts can account for them
+  // explicitly rather than by loosening its regex.
   return (
-    <div className="space-y-4">
+    <div className="space-y-4" data-detector-text>
       <Card>
-        <CardHeader title="The rule that fired" />
+        <CardHeader title={d.evidence.ruleTitle} />
         <p className="px-4 py-3 text-sm leading-relaxed text-ink">
           {evidence.rule}
         </p>
@@ -22,8 +28,8 @@ export function EvidencePanels({ evidence }: { evidence: AlertEvidence }) {
 
       <Card>
         <CardHeader
-          title="Figures relied on"
-          subtitle="Read directly from the work's record at the time of detection."
+          title={d.evidence.factsTitle}
+          subtitle={d.evidence.factsSubtitle}
         />
         <dl className="divide-y divide-line/60 text-sm">
           {evidence.facts.map((f) => (
@@ -38,22 +44,24 @@ export function EvidencePanels({ evidence }: { evidence: AlertEvidence }) {
       {evidence.rows && evidence.rows.length > 0 ? (
         <Card>
           <CardHeader
-            title={evidence.rows.some((r) => r.flagged) ? "Records" : "What drove the score"}
+            title={
+              evidence.rows.some((r) => r.flagged)
+                ? d.evidence.recordsTitle
+                : d.evidence.driversTitle
+            }
             subtitle={
               evidence.rows.some((r) => r.flagged)
-                ? "Rows marked in red are the ones that breach the rule."
-                : "Each measure, this work's value against the typical one, and how much of the score it accounts for."
+                ? d.evidence.recordsSubtitle
+                : d.evidence.driversSubtitle
             }
           />
           <div className="overflow-x-auto">
             <table className="w-full min-w-[640px] text-sm">
-              <caption className="sr-only">
-                Underlying records this alert relied on
-              </caption>
+              <caption className="sr-only">{d.evidence.recordsCaption}</caption>
               <thead>
                 <tr className="border-b border-line text-2xs uppercase tracking-wide text-slate">
                   <th scope="col" className="px-4 py-2 text-left font-medium">
-                    Record
+                    {d.evidence.recordColumn}
                   </th>
                   {evidence.rows[0].values.map((v) => (
                     <th
@@ -101,32 +109,45 @@ export function EvidencePanels({ evidence }: { evidence: AlertEvidence }) {
 
       <Card>
         <CardHeader
-          title="How this was prioritised"
-          subtitle="The score is a weighted sum, shown in full so it can be challenged."
+          title={d.evidence.scoringTitle}
+          subtitle={d.evidence.scoringSubtitle}
         />
         <div className="overflow-x-auto">
           <table className="w-full min-w-[520px] text-sm">
-            <caption className="sr-only">
-              Components of the anomaly-priority score
-            </caption>
+            <caption className="sr-only">{d.evidence.scoringCaption}</caption>
             <thead>
               <tr className="border-b border-line text-2xs uppercase tracking-wide text-slate">
-                <th scope="col" className="px-4 py-2 text-left font-medium">Component</th>
-                <th scope="col" className="px-4 py-2 text-left font-medium">Basis</th>
-                <th scope="col" className="px-4 py-2 text-right font-medium">Weight</th>
-                <th scope="col" className="px-4 py-2 text-right font-medium">Value</th>
-                <th scope="col" className="px-4 py-2 text-right font-medium">Contribution</th>
+                <th scope="col" className="px-4 py-2 text-left font-medium">
+                  {d.evidence.component}
+                </th>
+                <th scope="col" className="px-4 py-2 text-left font-medium">
+                  {d.evidence.basis}
+                </th>
+                <th scope="col" className="px-4 py-2 text-right font-medium">
+                  {d.evidence.weight}
+                </th>
+                <th scope="col" className="px-4 py-2 text-right font-medium">
+                  {d.evidence.value}
+                </th>
+                <th scope="col" className="px-4 py-2 text-right font-medium">
+                  {d.evidence.contribution}
+                </th>
               </tr>
             </thead>
             <tbody>
               {evidence.scoring.map((c) => (
-                <tr key={c.label} className="border-b border-line/60 last:border-0">
+                <tr
+                  key={c.label}
+                  className="border-b border-line/60 last:border-0"
+                >
                   <td className="px-4 py-2 text-ink">{c.label}</td>
                   <td className="px-4 py-2 text-slate">{c.basis}</td>
                   <td className="tnum px-4 py-2 text-right text-slate">
                     {Math.round(c.weight * 100)}%
                   </td>
-                  <td className="tnum px-4 py-2 text-right text-slate">{c.value}</td>
+                  <td className="tnum px-4 py-2 text-right text-slate">
+                    {c.value}
+                  </td>
                   <td className="tnum px-4 py-2 text-right text-ink">
                     {Math.round(c.weight * c.value)}
                   </td>
@@ -136,11 +157,14 @@ export function EvidencePanels({ evidence }: { evidence: AlertEvidence }) {
             <tfoot>
               <tr className="border-t border-line font-medium">
                 <td className="px-4 py-2 text-ink" colSpan={4}>
-                  Anomaly-Priority Score
+                  {d.evidence.total}
                 </td>
                 <td className="tnum px-4 py-2 text-right text-ink">
                   {Math.round(
-                    evidence.scoring.reduce((s, c) => s + c.weight * c.value, 0),
+                    evidence.scoring.reduce(
+                      (s, c) => s + c.weight * c.value,
+                      0,
+                    ),
                   )}
                 </td>
               </tr>

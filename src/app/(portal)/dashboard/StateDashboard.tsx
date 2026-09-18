@@ -1,4 +1,7 @@
-import { CoverageGapNotice, HumanDecidesNotice } from "@/components/DataNotices";
+import {
+  CoverageGapNotice,
+  HumanDecidesNotice,
+} from "@/components/DataNotices";
 import Link from "next/link";
 
 import { RankedBars, TrendLines } from "@/components/charts";
@@ -19,7 +22,14 @@ import {
   topDelayRisks,
   worksByStage,
 } from "@/lib/dashboard";
-import { daysBetween, formatDate, formatINR, formatNumber, formatPct } from "@/lib/format";
+import {
+  daysBetween,
+  formatDate,
+  formatINR,
+  formatNumber,
+  formatPct,
+} from "@/lib/format";
+import { fill, t as tr } from "@/lib/i18n";
 import { COMPLETION_WINDOW_DAYS } from "@/lib/scheme";
 import type { Scope } from "@/lib/scope";
 
@@ -37,6 +47,7 @@ export async function StateDashboard({
   scope: Scope;
   stateName: string;
 }) {
+  const d = tr();
   const [kpis, districts, pipeline, alerts, stages, risks, overdue] =
     await Promise.all([
       schemeKpis(scope),
@@ -51,47 +62,61 @@ export async function StateDashboard({
   const byCompletion = [...districts]
     .sort((a, b) => a.completionRate - b.completionRate)
     .slice(0, 8)
-    .map((d) => ({
-      label: d.name,
-      value: Math.round(d.completionRate * 100),
-      hint: `${formatNumber(d.works)} works`,
+    .map((row) => ({
+      label: row.name,
+      value: Math.round(row.completionRate * 100),
+      hint: fill(d.dash.worksCount, { count: formatNumber(row.works) }),
     }));
 
   return (
     <div className="space-y-5">
       <DashboardHeading
-        title={`${stateName} — district oversight`}
-        subtitle={`All ${formatNumber(kpis.districts)} districts in ${stateName}. Districts are compared against each other, because the decision an SNA makes is which one to chase.`}
-        badge="State Nodal Authority"
+        title={fill(d.dash.stateTitle, { state: stateName })}
+        subtitle={fill(d.dash.stateSubtitle, {
+          state: stateName,
+          count: formatNumber(kpis.districts),
+        })}
+        badge={d.role.SNA}
       />
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
         <KpiCard
-          label="Works"
+          label={d.kpi.works}
           value={formatNumber(kpis.works)}
-          hint={`across ${formatNumber(kpis.districts)} districts`}
+          hint={fill(d.dash.hintAcrossDistricts, {
+            count: formatNumber(kpis.districts),
+          })}
         />
-        <KpiCard label="Sanctioned" value={formatINR(kpis.sanctioned)} />
+        <KpiCard label={d.kpi.sanctioned} value={formatINR(kpis.sanctioned)} />
         <KpiCard
-          label="Released to vendors"
+          label={d.kpi.released}
           value={formatINR(kpis.released)}
-          hint={`${formatPct(kpis.sanctioned > 0 ? kpis.released / kpis.sanctioned : 0, 0)} of sanctioned`}
+          hint={fill(d.dash.hintOfSanctioned, {
+            pct: formatPct(
+              kpis.sanctioned > 0 ? kpis.released / kpis.sanctioned : 0,
+              0,
+            ),
+          })}
         />
         <KpiCard
-          label="Completion rate"
+          label={d.kpi.completionRate}
           value={formatPct(kpis.completionRate, 1)}
-          hint={`${formatNumber(kpis.completed)} marked complete`}
+          hint={fill(d.dash.hintMarkedComplete, {
+            count: formatNumber(kpis.completed),
+          })}
         />
         <KpiCard
-          label="Past one-year rule"
+          label={d.kpi.pastOneYear}
           value={formatNumber(kpis.overdue)}
-          hint="needs escalation"
+          hint={d.dash.hintNeedsEscalation}
           emphasis={kpis.overdue > 0}
         />
         <KpiCard
-          label="Critical alerts"
+          label={d.kpi.criticalAlerts}
           value={formatNumber(kpis.criticalAlerts)}
-          hint={`of ${formatNumber(kpis.openAlerts)} awaiting review`}
+          hint={fill(d.dash.hintOfAwaiting, {
+            count: formatNumber(kpis.openAlerts),
+          })}
           emphasis={kpis.criticalAlerts > 0}
         />
       </div>
@@ -99,25 +124,26 @@ export async function StateDashboard({
       <AlertQueuePreview
         alerts={alerts}
         total={kpis.openAlerts}
-        emptyBody={`No open alert in ${stateName}. Either the detectors have not run since the data last changed, or every signal has been reviewed.`}
+        emptyBody={fill(d.dash.noAlertsIn, { place: stateName })}
       />
 
       <div className="grid items-start gap-4 lg:grid-cols-2">
         <Card>
           <CardHeader
-            title="Works past the one-year rule"
-            subtitle="Sanctioned over a year ago and still not marked complete. These are the escalations — named, because a count by district is already a column in the table below."
+            title={d.dash.overdueTitle}
+            subtitle={d.dash.overdueSubtitle}
           />
           {overdue.length === 0 ? (
             <EmptyState
-              title="Nothing past the guideline"
-              body={`Every sanctioned work in ${stateName} is either inside the one-year window or already marked complete.`}
+              title={d.dash.overdueEmptyTitle}
+              body={fill(d.dash.overdueEmptyBody, { place: stateName })}
             />
           ) : (
             <ul className="divide-y divide-line/60">
               {overdue.map((w) => {
                 const over =
-                  daysBetween(w.sanctionedAt!, new Date()) - COMPLETION_WINDOW_DAYS;
+                  daysBetween(w.sanctionedAt!, new Date()) -
+                  COMPLETION_WINDOW_DAYS;
                 return (
                   <li key={w.id} className="px-4 py-2">
                     <Link
@@ -128,11 +154,15 @@ export async function StateDashboard({
                     </Link>
                     <div className="text-2xs text-slate">
                       <span className="font-medium text-severity-critical">
-                        {over} days over
+                        {fill(d.dash.daysOver, { days: over })}
                       </span>{" "}
-                      · {w.progressPct}% done · {w.district.name} ·{" "}
-                      {w.ia?.name ?? "no agency designated"} · due{" "}
-                      {formatDate(w.expectedCompletionAt)}
+                      ·{" "}
+                      {fill(d.dash.overdueMeta, {
+                        progress: w.progressPct,
+                        district: w.district.name,
+                        agency: w.ia?.name ?? d.dash.noAgencyDesignatedLower,
+                        due: formatDate(w.expectedCompletionAt),
+                      })}
                     </div>
                   </li>
                 );
@@ -143,12 +173,17 @@ export async function StateDashboard({
 
         <Card>
           <CardHeader
-            title="Lowest completion rates"
-            subtitle="Share of each district's works marked complete. Weakest first — a low rate can mean slow execution or slow marking, and the district table separates the two."
+            title={d.dash.lowestCompletionTitle}
+            subtitle={d.dash.lowestCompletionSubtitle}
           />
           <RankedBars
+            labels={{
+              showChart: d.common.showChart,
+              showFigures: d.common.showFigures,
+              month: d.table.month,
+            }}
             data={byCompletion}
-            valueName="Completion rate"
+            valueName={d.dash.completionRateSeries}
             height={240}
             format="percent"
           />
@@ -156,9 +191,9 @@ export async function StateDashboard({
       </div>
 
       <ComparisonTable
-        title="Districts compared"
-        subtitle="Ordered by critical alerts."
-        unitLabel="District"
+        title={d.dash.districtsComparedTitle}
+        subtitle={d.dash.districtsComparedSubtitle}
+        unitLabel={d.table.district}
         rows={districts}
       />
 
@@ -169,15 +204,20 @@ export async function StateDashboard({
 
       <Card>
         <CardHeader
-          title="Works through the pipeline"
-          subtitle={`Monthly count of works recommended, sanctioned, and marked complete across ${stateName}.`}
+          title={d.dash.pipelineTitle}
+          subtitle={fill(d.dash.pipelineSubtitleIn, { place: stateName })}
         />
         <TrendLines
+          labels={{
+            showChart: d.common.showChart,
+            showFigures: d.common.showFigures,
+            month: d.table.month,
+          }}
           data={pipeline}
           series={[
-            { key: "recommended", name: "Recommended" },
-            { key: "sanctioned", name: "Sanctioned" },
-            { key: "completed", name: "Marked complete" },
+            { key: "recommended", name: d.dash.seriesRecommended },
+            { key: "sanctioned", name: d.dash.seriesSanctioned },
+            { key: "completed", name: d.dash.seriesMarkedComplete },
           ]}
         />
       </Card>

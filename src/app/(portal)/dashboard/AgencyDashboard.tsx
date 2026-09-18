@@ -5,8 +5,8 @@ import { Card, CardHeader, EmptyState, KpiCard } from "@/components/ui";
 import { schemeKpis, worksByStage } from "@/lib/dashboard";
 import { prisma } from "@/lib/db";
 import { formatDate, formatINR, formatNumber, formatPct } from "@/lib/format";
+import { fill, t as tr } from "@/lib/i18n";
 import { scoped, type Scope } from "@/lib/scope";
-import { WORK_STATUS_LABELS } from "@/lib/scheme";
 
 /**
  * Implementing Agency — the works assigned to them.
@@ -25,32 +25,42 @@ export async function AgencyDashboard({
   scope: Scope;
   agencyName: string;
 }) {
-  const [kpis, stages, needsEvidence, needsMarking, running, totalStages, documented] =
-    await Promise.all([
-      schemeKpis(scope),
-      worksByStage(scope),
-      prisma.payment.findMany({
-        where: scoped(scope.payment, { evidence: { none: {} } }),
-        orderBy: { releasedAt: "desc" },
-        take: 12,
-        include: { work: true },
+  const d = tr();
+  const [
+    kpis,
+    stages,
+    needsEvidence,
+    needsMarking,
+    running,
+    totalStages,
+    documented,
+  ] = await Promise.all([
+    schemeKpis(scope),
+    worksByStage(scope),
+    prisma.payment.findMany({
+      where: scoped(scope.payment, { evidence: { none: {} } }),
+      orderBy: { releasedAt: "desc" },
+      take: 12,
+      include: { work: true },
+    }),
+    prisma.work.findMany({
+      where: scoped(scope.work, { status: "COMPLETED_UNMARKED" }),
+      orderBy: { completedAt: "asc" },
+      take: 10,
+    }),
+    prisma.work.findMany({
+      where: scoped(scope.work, {
+        status: { in: ["SANCTIONED", "IN_PROGRESS"] },
       }),
-      prisma.work.findMany({
-        where: scoped(scope.work, { status: "COMPLETED_UNMARKED" }),
-        orderBy: { completedAt: "asc" },
-        take: 10,
-      }),
-      prisma.work.findMany({
-        where: scoped(scope.work, { status: { in: ["SANCTIONED", "IN_PROGRESS"] } }),
-        orderBy: { expectedCompletionAt: "asc" },
-        take: 12,
-        include: { district: true, delayRisk: true },
-      }),
-      prisma.payment.count({ where: scope.payment }),
-      prisma.payment.count({
-        where: scoped(scope.payment, { evidence: { some: {} } }),
-      }),
-    ]);
+      orderBy: { expectedCompletionAt: "asc" },
+      take: 12,
+      include: { district: true, delayRisk: true },
+    }),
+    prisma.payment.count({ where: scope.payment }),
+    prisma.payment.count({
+      where: scoped(scope.payment, { evidence: { some: {} } }),
+    }),
+  ]);
 
   const evidenceRate = totalStages > 0 ? documented / totalStages : 1;
 
@@ -58,27 +68,35 @@ export async function AgencyDashboard({
     <div className="space-y-5">
       <DashboardHeading
         title={agencyName}
-        subtitle="Works designated to this agency, and the records still outstanding against them."
-        badge="Implementing Agency"
+        subtitle={d.dash.agencySubtitle}
+        badge={d.role.IA}
       />
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <KpiCard
-          label="Works assigned"
+          label={d.dash.kpiWorksAssigned}
           value={formatNumber(kpis.works)}
-          hint={`${formatNumber(kpis.completed)} marked complete`}
+          hint={fill(d.dash.hintMarkedComplete, {
+            count: formatNumber(kpis.completed),
+          })}
         />
-        <KpiCard label="Sanctioned value" value={formatINR(kpis.sanctioned)} />
         <KpiCard
-          label="Evidence on file"
+          label={d.dash.kpiSanctionedValue}
+          value={formatINR(kpis.sanctioned)}
+        />
+        <KpiCard
+          label={d.kpi.evidenceOnFile}
           value={formatPct(evidenceRate, 0)}
-          hint={`${formatNumber(documented)} of ${formatNumber(totalStages)} payment stages`}
+          hint={fill(d.dash.hintPaymentStages, {
+            documented: formatNumber(documented),
+            total: formatNumber(totalStages),
+          })}
           emphasis={evidenceRate < 0.9}
         />
         <KpiCard
-          label="Awaiting your completion marking"
+          label={d.dash.kpiAwaitingYourMarking}
           value={formatNumber(kpis.awaitingMarking)}
-          hint="finished on the ground"
+          hint={d.dash.hintFinishedOnGround}
           emphasis={kpis.awaitingMarking > 0}
         />
       </div>
@@ -86,13 +104,13 @@ export async function AgencyDashboard({
       <div className="grid items-start gap-4 lg:grid-cols-2">
         <Card>
           <CardHeader
-            title="Photographs and documents to upload"
-            subtitle="Payment stages released with nothing on record against them. The sanction order requires an asset photograph at each stage."
+            title={d.dash.uploadTitle}
+            subtitle={d.dash.uploadSubtitle}
           />
           {needsEvidence.length === 0 ? (
             <EmptyState
-              title="Nothing outstanding"
-              body="Every payment stage released to this agency has at least one photograph or document uploaded."
+              title={d.dash.uploadEmptyTitle}
+              body={d.dash.uploadEmptyBody}
             />
           ) : (
             <ul className="divide-y divide-line/60">
@@ -105,8 +123,11 @@ export async function AgencyDashboard({
                     {p.work.title}
                   </Link>
                   <div className="text-2xs text-slate">
-                    stage {p.stageNo} · {formatINR(p.amount)} · released{" "}
-                    {formatDate(p.releasedAt)}
+                    {fill(d.dash.stageMeta, {
+                      stage: p.stageNo,
+                      amount: formatINR(p.amount),
+                      date: formatDate(p.releasedAt),
+                    })}
                   </div>
                 </li>
               ))}
@@ -115,14 +136,11 @@ export async function AgencyDashboard({
         </Card>
 
         <Card>
-          <CardHeader
-            title="Works to mark complete"
-            subtitle="Recorded at 100% and finished on the ground. Until this agency marks them complete they do not appear as completed anywhere."
-          />
+          <CardHeader title={d.dash.markTitle} subtitle={d.dash.markSubtitle} />
           {needsMarking.length === 0 ? (
             <EmptyState
-              title="Nothing pending"
-              body="Every finished work assigned to this agency has been marked complete."
+              title={d.dash.markEmptyTitle}
+              body={d.dash.markEmptyBody}
             />
           ) : (
             <ul className="divide-y divide-line/60">
@@ -135,8 +153,10 @@ export async function AgencyDashboard({
                     {w.title}
                   </Link>
                   <div className="text-2xs text-slate">
-                    complete since {formatDate(w.completedAt)} ·{" "}
-                    {formatINR(w.sanctionedAmount)}
+                    {fill(d.dash.markMeta, {
+                      date: formatDate(w.completedAt),
+                      amount: formatINR(w.sanctionedAmount),
+                    })}
                   </div>
                 </li>
               ))}
@@ -147,31 +167,46 @@ export async function AgencyDashboard({
 
       <Card>
         <CardHeader
-          title="Works in hand"
-          subtitle="Sanctioned or under execution, soonest due first."
+          title={d.dash.inHandTitle}
+          subtitle={d.dash.inHandSubtitle}
         />
         {running.length === 0 ? (
           <EmptyState
-            title="No works in hand"
-            body="This agency has no sanctioned or in-progress works at present."
+            title={d.dash.inHandEmptyTitle}
+            body={d.dash.inHandEmptyBody}
           />
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full min-w-[720px] text-sm">
-              <caption className="sr-only">Works currently assigned</caption>
+              <caption className="sr-only">{d.dash.inHandCaption}</caption>
               <thead>
                 <tr className="border-b border-line text-2xs uppercase tracking-wide text-slate">
-                  <th scope="col" className="px-4 py-2 text-left font-medium">Work</th>
-                  <th scope="col" className="px-4 py-2 text-left font-medium">District</th>
-                  <th scope="col" className="px-4 py-2 text-right font-medium">Sanctioned</th>
-                  <th scope="col" className="px-4 py-2 text-right font-medium">Due</th>
-                  <th scope="col" className="px-4 py-2 text-right font-medium">Progress</th>
-                  <th scope="col" className="px-4 py-2 text-left font-medium">Stage</th>
+                  <th scope="col" className="px-4 py-2 text-left font-medium">
+                    {d.table.work}
+                  </th>
+                  <th scope="col" className="px-4 py-2 text-left font-medium">
+                    {d.table.district}
+                  </th>
+                  <th scope="col" className="px-4 py-2 text-right font-medium">
+                    {d.table.sanctioned}
+                  </th>
+                  <th scope="col" className="px-4 py-2 text-right font-medium">
+                    {d.table.due}
+                  </th>
+                  <th scope="col" className="px-4 py-2 text-right font-medium">
+                    {d.table.progress}
+                  </th>
+                  <th scope="col" className="px-4 py-2 text-left font-medium">
+                    {d.table.stage}
+                  </th>
                 </tr>
               </thead>
               <tbody>
                 {running.map((w) => (
-                  <tr key={w.id} className="border-b border-line/60 last:border-0 hover:bg-paper">
+                  <tr
+                    key={w.id}
+                    className="border-b border-line/60 last:border-0 hover:bg-paper"
+                  >
                     <td className="px-4 py-2">
                       <Link
                         href={`/works/${w.id}`}
@@ -188,9 +223,11 @@ export async function AgencyDashboard({
                     <td className="tnum px-4 py-2 text-right text-slate">
                       {formatDate(w.expectedCompletionAt)}
                     </td>
-                    <td className="tnum px-4 py-2 text-right text-ink">{w.progressPct}%</td>
+                    <td className="tnum px-4 py-2 text-right text-ink">
+                      {w.progressPct}%
+                    </td>
                     <td className="px-4 py-2 text-slate">
-                      {WORK_STATUS_LABELS[w.status]}
+                      {d.workStatus[w.status]}
                     </td>
                   </tr>
                 ))}
@@ -201,14 +238,19 @@ export async function AgencyDashboard({
       </Card>
 
       <Card>
-        <CardHeader title="Works by stage" />
+        <CardHeader title={d.dash.stagesTitle} />
         <table className="w-full text-sm">
-          <caption className="sr-only">Works by stage</caption>
+          <caption className="sr-only">{d.dash.stagesCaption}</caption>
           <tbody>
             {stages.map((s) => (
-              <tr key={s.status} className="border-b border-line/60 last:border-0">
-                <td className="px-4 py-2 text-ink">{WORK_STATUS_LABELS[s.status]}</td>
-                <td className="tnum px-4 py-2 text-right text-ink">{s.count}</td>
+              <tr
+                key={s.status}
+                className="border-b border-line/60 last:border-0"
+              >
+                <td className="px-4 py-2 text-ink">{d.workStatus[s.status]}</td>
+                <td className="tnum px-4 py-2 text-right text-ink">
+                  {s.count}
+                </td>
               </tr>
             ))}
           </tbody>

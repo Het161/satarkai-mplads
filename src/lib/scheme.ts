@@ -37,6 +37,14 @@ export const THRESHOLDS = {
  */
 export const DATA_COVERAGE_FROM = new Date("2023-04-01T00:00:00.000Z");
 
+/**
+ * The coverage gap, for reference.
+ *
+ * The copy shown to officers lives in the dictionaries as `notice.coverage`,
+ * because it has to be readable in Hindi too. This constant stays as the
+ * canonical statement of the limit for anything outside the UI — scripts,
+ * exports, and anyone reading the scheme rules in one place.
+ */
 export const DATA_COVERAGE_NOTE =
   "eSAKSHI holds MPLADS data from 1 April 2023 onward. For the 17th Lok Sabha, FY 2019-20 to 2022-23 is not available on the portal, and Rajya Sabha details are unavailable before FY 2023-24.";
 

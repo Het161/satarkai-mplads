@@ -1,4 +1,7 @@
-import { CoverageGapNotice, HumanDecidesNotice } from "@/components/DataNotices";
+import {
+  CoverageGapNotice,
+  HumanDecidesNotice,
+} from "@/components/DataNotices";
 import { RankedBars, TrendLines } from "@/components/charts";
 import {
   AlertQueuePreview,
@@ -19,7 +22,7 @@ import {
   worksByStage,
 } from "@/lib/dashboard";
 import { formatINR, formatNumber, formatPct } from "@/lib/format";
-import { ALERT_TYPE_LABELS } from "@/lib/scheme";
+import { fill, t as tr } from "@/lib/i18n";
 import type { Scope } from "@/lib/scope";
 
 /**
@@ -30,6 +33,7 @@ import type { Scope } from "@/lib/scope";
  * waiting. Everything drills down; nothing is a dead end.
  */
 export async function MinistryDashboard({ scope }: { scope: Scope }) {
+  const d = tr();
   const [kpis, pipeline, spend, states, byType, alerts, stages, risks] =
     await Promise.all([
       schemeKpis(scope),
@@ -49,53 +53,67 @@ export async function MinistryDashboard({ scope }: { scope: Scope }) {
     .map((s) => ({
       label: s.name,
       value: s.alerts,
-      hint: `${s.criticalAlerts} critical · ${formatNumber(s.works)} works`,
+      hint: fill(d.dash.criticalWorks, {
+        critical: s.criticalAlerts,
+        works: formatNumber(s.works),
+      }),
     }));
 
   const alertTypeBars = byType.slice(0, 8).map((a) => ({
-    label: ALERT_TYPE_LABELS[a.type],
+    label: d.alertType[a.type],
     value: a._count,
   }));
 
   return (
     <div className="space-y-5">
       <DashboardHeading
-        title="National overview"
-        subtitle="Every state and Union Territory. Scheme-wide position, where risk is concentrated, and the cases waiting on someone's decision."
-        badge="Ministry / Central Nodal Agency"
+        title={d.dash.ministryTitle}
+        subtitle={d.dash.ministrySubtitle}
+        badge={d.role.MINISTRY}
       />
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
         <KpiCard
-          label="Works"
+          label={d.kpi.works}
           value={formatNumber(kpis.works)}
-          hint={`across ${formatNumber(kpis.districts)} districts`}
+          hint={fill(d.dash.hintAcrossDistricts, {
+            count: formatNumber(kpis.districts),
+          })}
         />
         <KpiCard
-          label="Recommended"
+          label={d.kpi.recommended}
           value={formatINR(kpis.recommended)}
-          hint="earmarked by MPs"
+          hint={d.dash.hintEarmarkedByMps}
         />
         <KpiCard
-          label="Released to vendors"
+          label={d.kpi.released}
           value={formatINR(kpis.released)}
-          hint={`${formatPct(kpis.sanctioned > 0 ? kpis.released / kpis.sanctioned : 0, 0)} of sanctioned`}
+          hint={fill(d.dash.hintOfSanctioned, {
+            pct: formatPct(
+              kpis.sanctioned > 0 ? kpis.released / kpis.sanctioned : 0,
+              0,
+            ),
+          })}
         />
         <KpiCard
-          label="Completion rate"
+          label={d.kpi.completionRate}
           value={formatPct(kpis.completionRate, 1)}
-          hint={`${formatNumber(kpis.completed)} marked complete`}
+          hint={fill(d.dash.hintMarkedComplete, {
+            count: formatNumber(kpis.completed),
+          })}
         />
         <KpiCard
-          label="Past one-year rule"
+          label={d.kpi.pastOneYear}
           value={formatNumber(kpis.overdue)}
-          hint="sanctioned > 365 days, unmarked"
+          hint={d.dash.hintSanctionedOver365}
           emphasis={kpis.overdue > 0}
         />
         <KpiCard
-          label="Critical alerts"
+          label={d.kpi.criticalAlerts}
           value={formatNumber(kpis.criticalAlerts)}
-          hint={`of ${formatNumber(kpis.openAlerts)} awaiting review`}
+          hint={fill(d.dash.hintOfAwaiting, {
+            count: formatNumber(kpis.openAlerts),
+          })}
           emphasis={kpis.criticalAlerts > 0}
         />
       </div>
@@ -103,27 +121,37 @@ export async function MinistryDashboard({ scope }: { scope: Scope }) {
       <div className="grid items-start gap-4 lg:grid-cols-2">
         <Card>
           <CardHeader
-            title="Works through the pipeline"
-            subtitle="Monthly count of works recommended, sanctioned, and marked complete. All three count works, so they share one scale."
+            title={d.dash.pipelineTitle}
+            subtitle={d.dash.pipelineSubtitle}
           />
           <TrendLines
+            labels={{
+              showChart: d.common.showChart,
+              showFigures: d.common.showFigures,
+              month: d.table.month,
+            }}
             data={pipeline}
             series={[
-              { key: "recommended", name: "Recommended" },
-              { key: "sanctioned", name: "Sanctioned" },
-              { key: "completed", name: "Marked complete" },
+              { key: "recommended", name: d.dash.seriesRecommended },
+              { key: "sanctioned", name: d.dash.seriesSanctioned },
+              { key: "completed", name: d.dash.seriesMarkedComplete },
             ]}
           />
         </Card>
 
         <Card>
           <CardHeader
-            title="Vendor payments released"
-            subtitle="Money moves on a different scale from work counts, so it gets its own chart rather than a second axis."
+            title={d.dash.spendTitle}
+            subtitle={d.dash.spendSubtitle}
           />
           <TrendLines
+            labels={{
+              showChart: d.common.showChart,
+              showFigures: d.common.showFigures,
+              month: d.table.month,
+            }}
             data={spend}
-            series={[{ key: "released", name: "Released" }]}
+            series={[{ key: "released", name: d.dash.seriesReleased }]}
             format="inr"
           />
         </Card>
@@ -132,31 +160,49 @@ export async function MinistryDashboard({ scope }: { scope: Scope }) {
       <AlertQueuePreview
         alerts={alerts}
         total={kpis.openAlerts}
-        emptyBody="No open alert in any state. Either the detectors have not run since the data last changed, or every signal has been reviewed."
+        emptyBody={d.dash.noAlertsNational}
       />
 
       <div className="grid items-start gap-4 lg:grid-cols-2">
         <Card>
           <CardHeader
-            title="Where alerts are concentrated"
-            subtitle="Open and reviewed alerts by state. Bar length is the count; hover for the critical share."
+            title={d.dash.concentrationTitle}
+            subtitle={d.dash.concentrationSubtitle}
           />
-          <RankedBars data={riskiestStates} valueName="Alerts" height={240} />
+          <RankedBars
+            labels={{
+              showChart: d.common.showChart,
+              showFigures: d.common.showFigures,
+              month: d.table.month,
+            }}
+            data={riskiestStates}
+            valueName={d.dash.alertsSeries}
+            height={240}
+          />
         </Card>
 
         <Card>
           <CardHeader
-            title="What is being flagged"
-            subtitle="Alert volume by type, across the country."
+            title={d.dash.flaggedTitle}
+            subtitle={d.dash.flaggedSubtitle}
           />
-          <RankedBars data={alertTypeBars} valueName="Alerts" height={240} />
+          <RankedBars
+            labels={{
+              showChart: d.common.showChart,
+              showFigures: d.common.showFigures,
+              month: d.table.month,
+            }}
+            data={alertTypeBars}
+            valueName={d.dash.alertsSeries}
+            height={240}
+          />
         </Card>
       </div>
 
       <ComparisonTable
-        title="States compared"
-        subtitle="Ordered by critical alerts. Every figure is a link into that state's works."
-        unitLabel="State"
+        title={d.dash.statesComparedTitle}
+        subtitle={d.dash.statesComparedSubtitle}
+        unitLabel={d.table.state}
         rows={states}
       />
 

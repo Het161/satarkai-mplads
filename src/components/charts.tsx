@@ -53,7 +53,9 @@ function formatter(format: ValueFormat): (v: number) => string {
   }
 }
 
-const tickStyle = { fill: AXIS.tick, fontSize: 11 };
+/* Matches the `2xs` step in tailwind.config.ts — axis ticks and the secondary
+   text around them should not disagree about how small is too small. */
+const tickStyle = { fill: AXIS.tick, fontSize: 13 };
 
 function TooltipBox({
   label,
@@ -86,15 +88,29 @@ function TooltipBox({
   );
 }
 
+/**
+ * Strings the charts need, passed down from the server.
+ *
+ * This file is a client component (Recharts needs the DOM), so it cannot read
+ * the locale cookie itself — same constraint, and same answer, as LoginForm.
+ */
+export type ChartLabels = {
+  showChart: string;
+  showFigures: string;
+  month: string;
+};
+
 /** Toggle between the plot and the same figures as a table. */
 function ChartFrame({
   children,
   table,
   height,
+  labels,
 }: {
   children: React.ReactNode;
   table: React.ReactNode;
   height: number;
+  labels: ChartLabels;
 }) {
   const [showTable, setShowTable] = useState(false);
   const id = useId();
@@ -109,7 +125,7 @@ function ChartFrame({
           aria-controls={id}
           className="rounded border border-line px-2 py-0.5 text-2xs font-medium text-slate hover:bg-paper hover:text-ink"
         >
-          {showTable ? "Show chart" : "Show figures"}
+          {showTable ? labels.showChart : labels.showFigures}
         </button>
       </div>
       <div id={id}>
@@ -184,11 +200,13 @@ export function TrendLines({
   series,
   height = 240,
   format = "count",
+  labels,
 }: {
   data: TrendPoint[];
   series: { key: string; name: string }[];
   height?: number;
   format?: ValueFormat;
+  labels: ChartLabels;
 }) {
   const shown = series.slice(0, SERIES.length);
   const formatValue = formatter(format);
@@ -199,7 +217,10 @@ export function TrendLines({
           three or fewer series each is also named in the tooltip. */}
       <ul className="flex flex-wrap gap-x-4 gap-y-1 px-4 pt-2">
         {shown.map((s, i) => (
-          <li key={s.key} className="flex items-center gap-1.5 text-2xs text-slate">
+          <li
+            key={s.key}
+            className="flex items-center gap-1.5 text-2xs text-slate"
+          >
             <span
               aria-hidden
               className="inline-block h-0.5 w-4 rounded-full"
@@ -211,10 +232,11 @@ export function TrendLines({
       </ul>
 
       <ChartFrame
+        labels={labels}
         height={height}
         table={
           <DataTable
-            columns={["Month", ...shown.map((s) => s.name)]}
+            columns={[labels.month, ...shown.map((s) => s.name)]}
             rows={data.map((d) => [
               d.label,
               ...shown.map((s) => formatValue(Number(d[s.key] ?? 0))),
@@ -223,7 +245,10 @@ export function TrendLines({
         }
       >
         <ResponsiveContainer width="100%" height="100%">
-          <LineChart data={data} margin={{ top: 8, right: 12, bottom: 4, left: 4 }}>
+          <LineChart
+            data={data}
+            margin={{ top: 8, right: 12, bottom: 4, left: 4 }}
+          >
             <CartesianGrid
               stroke={AXIS.grid}
               strokeDasharray="0"
@@ -245,7 +270,11 @@ export function TrendLines({
               tickFormatter={(v) => formatValue(Number(v))}
             />
             <Tooltip
-              cursor={{ stroke: AXIS.tick, strokeWidth: 1, strokeDasharray: "3 3" }}
+              cursor={{
+                stroke: AXIS.tick,
+                strokeWidth: 1,
+                strokeDasharray: "3 3",
+              }}
               content={({ active, payload, label }) =>
                 active && payload?.length ? (
                   <TooltipBox
@@ -293,15 +322,18 @@ export function RankedBars({
   valueName,
   height = 260,
   format = "count",
+  labels,
 }: {
   data: { label: string; value: number; hint?: string }[];
   valueName: string;
   height?: number;
   format?: ValueFormat;
+  labels: ChartLabels;
 }) {
   const formatValue = formatter(format);
   return (
     <ChartFrame
+      labels={labels}
       height={height}
       table={
         <DataTable
@@ -379,18 +411,23 @@ export function FundFlowBars({
   data,
   height = 200,
   format = "inr",
+  labels,
+  columnLabels,
 }: {
   data: { label: string; value: number }[];
   height?: number;
   format?: ValueFormat;
+  labels: ChartLabels;
+  columnLabels: { stage: string; amount: string };
 }) {
   const formatValue = formatter(format);
   return (
     <ChartFrame
+      labels={labels}
       height={height}
       table={
         <DataTable
-          columns={["Stage", "Amount"]}
+          columns={[columnLabels.stage, columnLabels.amount]}
           rows={data.map((d) => [d.label, formatValue(d.value)])}
         />
       }
@@ -436,7 +473,10 @@ export function FundFlowBars({
           />
           <Bar dataKey="value" radius={[0, 4, 4, 0]} maxBarSize={26}>
             {data.map((d, i) => (
-              <Cell key={d.label} fill={ORDINAL[Math.min(i, ORDINAL.length - 1)]} />
+              <Cell
+                key={d.label}
+                fill={ORDINAL[Math.min(i, ORDINAL.length - 1)]}
+              />
             ))}
           </Bar>
         </BarChart>

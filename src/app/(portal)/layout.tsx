@@ -7,26 +7,31 @@ import { getSessionUser } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { scopeFor } from "@/lib/scope";
 import { LocaleSwitcher } from "@/components/LocaleSwitcher";
-import { t } from "@/lib/i18n";
+import { fill, t, type Dictionary } from "@/lib/i18n";
 
 export const dynamic = "force-dynamic";
 
 /** Resolve the plain-English name of the user's jurisdiction for the header. */
-async function jurisdictionName(user: {
-  role: string;
-  stateId: string | null;
-  districtId: string | null;
-  mpId: string | null;
-  iaId: string | null;
-}): Promise<string> {
+async function jurisdictionName(
+  user: {
+    role: string;
+    stateId: string | null;
+    districtId: string | null;
+    mpId: string | null;
+    iaId: string | null;
+  },
+  dict: Dictionary,
+): Promise<string> {
   switch (user.role) {
     case "MINISTRY":
-      return "All States & Union Territories";
+      return dict.scope.national;
     case "SNA": {
       const s = user.stateId
         ? await prisma.state.findUnique({ where: { id: user.stateId } })
         : null;
-      return s ? `${s.name} — all districts` : "No state assigned";
+      return s
+        ? fill(dict.jurisdiction.stateAll, { state: s.name })
+        : dict.jurisdiction.noState;
     }
     case "DISTRICT": {
       const d = user.districtId
@@ -35,22 +40,34 @@ async function jurisdictionName(user: {
             include: { state: true },
           })
         : null;
-      return d ? `${d.name} district, ${d.state.name}` : "No district assigned";
+      return d
+        ? fill(dict.jurisdiction.districtIn, {
+            district: d.name,
+            state: d.state.name,
+          })
+        : dict.jurisdiction.noDistrict;
     }
     case "MP": {
       const m = user.mpId
         ? await prisma.mP.findUnique({ where: { id: user.mpId } })
         : null;
-      return m ? `${m.constituency} · ${m.house}` : "No constituency assigned";
+      return m
+        ? fill(dict.jurisdiction.constituency, {
+            constituency: m.constituency,
+            house: m.house === "RS" ? dict.dash.houseRS : dict.dash.houseLS,
+          })
+        : dict.jurisdiction.noConstituency;
     }
     case "IA": {
       const a = user.iaId
-        ? await prisma.implementingAgency.findUnique({ where: { id: user.iaId } })
+        ? await prisma.implementingAgency.findUnique({
+            where: { id: user.iaId },
+          })
         : null;
-      return a ? a.name : "No agency assigned";
+      return a ? a.name : dict.jurisdiction.noAgency;
     }
     default:
-      return "No jurisdiction assigned";
+      return dict.scope.none;
   }
 }
 
@@ -73,7 +90,7 @@ export default async function PortalLayout({
   const dict = t();
   const scope = scopeFor(user);
   const [jurisdiction, unread] = await Promise.all([
-    jurisdictionName(user),
+    jurisdictionName(user, dict),
     prisma.notification.count({ where: { userId: user.id, readAt: null } }),
   ]);
 
@@ -83,7 +100,10 @@ export default async function PortalLayout({
 
       <header className="border-b border-line bg-white">
         <div className="mx-auto flex max-w-[1400px] flex-wrap items-center gap-x-6 gap-y-2 px-4 py-2.5">
-          <Link href="/dashboard" className="text-base font-semibold tracking-tight text-ink">
+          <Link
+            href="/dashboard"
+            className="text-base font-semibold tracking-tight text-ink"
+          >
             Satark<span className="text-navy">AI</span>
           </Link>
 

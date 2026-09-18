@@ -1,10 +1,11 @@
 import type { Metadata } from "next";
 
-import { ProvenanceNote } from "@/components/ui";
+import { ProvenanceNote } from "@/components/ProvenanceNote";
 import { requireSession } from "@/lib/auth";
 import { latestSource } from "@/lib/dashboard";
 import { prisma } from "@/lib/db";
 import { formatDate } from "@/lib/format";
+import { fill, t } from "@/lib/i18n";
 
 import { AgencyDashboard } from "./AgencyDashboard";
 import { DistrictDashboard } from "./DistrictDashboard";
@@ -31,6 +32,7 @@ export const dynamic = "force-dynamic";
  */
 export default async function DashboardPage() {
   const { user, scope } = await requireSession();
+  const dict = t();
   const source = await latestSource();
 
   const dashboard = await renderFor(user, scope);
@@ -43,7 +45,11 @@ export default async function DashboardPage() {
           kind={source.kind}
           name={source.name}
           fetchedAt={formatDate(source.fetchedAt)}
-          note={source.sourceUrl ? `modelled on ${source.sourceUrl}` : undefined}
+          note={
+            source.sourceUrl
+              ? fill(dict.notice.modelledOn, { url: source.sourceUrl })
+              : undefined
+          }
         />
       ) : null}
     </div>
@@ -93,7 +99,9 @@ async function renderFor(
 
     case "IA": {
       const agency = user.iaId
-        ? await prisma.implementingAgency.findUnique({ where: { id: user.iaId } })
+        ? await prisma.implementingAgency.findUnique({
+            where: { id: user.iaId },
+          })
         : null;
       return (
         <AgencyDashboard

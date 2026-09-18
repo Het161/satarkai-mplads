@@ -3,7 +3,8 @@ import clsx from "clsx";
 
 import { Card, CardHeader, SeverityBadge } from "@/components/ui";
 import { formatDate, formatINR, formatINRExact } from "@/lib/format";
-import { ALERT_TYPE_LABELS, ALERT_TYPE_STEP } from "@/lib/scheme";
+import { fill, t as tr, type Dictionary } from "@/lib/i18n";
+import { ALERT_TYPE_STEP, type ALERT_TYPE_LABELS } from "@/lib/scheme";
 
 /**
  * A work's life, in order, with every risk signal attached to the step it
@@ -71,49 +72,55 @@ export function WorkTimeline({
   };
   alerts: TimelineAlert[];
 }) {
-  const totalEvidence = work.payments.reduce((s, p) => s + p.evidence.length, 0);
-  const documentedStages = work.payments.filter((p) => p.evidence.length > 0).length;
+  const d = tr();
+  const totalEvidence = work.payments.reduce(
+    (s, p) => s + p.evidence.length,
+    0,
+  );
+  const documentedStages = work.payments.filter(
+    (p) => p.evidence.length > 0,
+  ).length;
 
   const steps: Step[] = [
     {
       key: "recommendation",
       stepNames: ["Recommendation & earmarking"],
-      title: "Recommended and funds earmarked",
+      title: d.timeline.recommendedTitle,
       actor: `${work.mp.name} · ${work.mp.constituency}`,
       at: work.recommendedAt,
-      detail: (
-        <>
-          {formatINRExact(work.recommendedAmount as number)} earmarked against the
-          Member&apos;s annual entitlement, for {work.locality}, {work.district.name}.
-        </>
-      ),
+      detail: fill(d.timeline.recommendedDetail, {
+        amount: formatINRExact(work.recommendedAmount as number),
+        locality: work.locality,
+        district: work.district.name,
+      }),
     },
     {
       key: "sanction",
       stepNames: ["Sanction"],
-      title: "Sanctioned after feasibility checks",
-      actor: `${work.district.name} District Authority`,
+      title: d.timeline.sanctionTitle,
+      actor: fill(d.timeline.districtAuthority, {
+        district: work.district.name,
+      }),
       at: work.sanctionedAt,
-      detail: work.sanctionedAt ? (
-        <>
-          {formatINRExact(work.sanctionedAmount as number)} sanctioned. Due for
-          completion by {formatDate(work.expectedCompletionAt)}, one year from
-          sanction.
-        </>
-      ) : undefined,
+      detail: work.sanctionedAt
+        ? fill(d.timeline.sanctionDetail, {
+            amount: formatINRExact(work.sanctionedAmount as number),
+            due: formatDate(work.expectedCompletionAt),
+          })
+        : undefined,
       pending:
         work.status === "CANCELLED"
-          ? "The recommendation was cancelled before sanction."
-          : "Awaiting feasibility checks and sanction by the district authority.",
+          ? d.timeline.sanctionCancelled
+          : d.timeline.sanctionPending,
     },
     {
       key: "agency",
       stepNames: ["Designation of the implementing agency"],
-      title: "Implementing agency designated",
+      title: d.timeline.agencyTitle,
       actor: work.ia?.name ?? "—",
       at: work.sanctionedAt,
-      detail: work.ia ? <>Responsible for execution and for raising payment requests.</> : undefined,
-      pending: "No agency designated yet.",
+      detail: work.ia ? d.timeline.agencyDetail : undefined,
+      pending: d.timeline.agencyPending,
     },
   ];
 
@@ -126,17 +133,16 @@ export function WorkTimeline({
 
   return (
     <Card>
-      <CardHeader
-        title="The work, in order"
-        subtitle="Recommendation through to completion marking, with every risk signal attached to the step it concerns."
-      />
+      <CardHeader title={d.timeline.title} subtitle={d.timeline.subtitle} />
 
       <ol className="px-4 py-3">
         {steps.map((step) => (
           <TimelineStep
             key={step.key}
             step={step}
-            alerts={alerts.filter((a) => step.stepNames.includes(ALERT_TYPE_STEP[a.type]))}
+            alerts={alerts.filter((a) =>
+              step.stepNames.includes(ALERT_TYPE_STEP[a.type]),
+            )}
           />
         ))}
 
@@ -146,22 +152,32 @@ export function WorkTimeline({
         <li className="relative border-l border-line pb-5 pl-5 last:border-transparent">
           <Marker done={work.payments.length > 0} />
           <StepHeading
-            title="Vendor payments and asset evidence"
-            actor={work.ia?.name ?? "Implementing agency"}
+            title={d.timeline.paymentsTitle}
+            actor={work.ia?.name ?? d.timeline.implementingAgency}
             at={work.payments.length > 0 ? work.payments[0].releasedAt : null}
           />
 
           {work.payments.length === 0 ? (
             <p className="mt-1 text-2xs text-slate">
-              No vendor payment has been released against this work yet.
+              {d.timeline.paymentsNone}
             </p>
           ) : (
             <>
+              {/* Singular and plural are separate dictionary entries rather
+                  than an "s" appended in the layout: Hindi does not pluralise
+                  the same way, and neither language reads well when the noun
+                  is assembled from fragments. */}
               <p className="mt-1 text-2xs text-slate">
-                {work.payments.length} stage
-                {work.payments.length === 1 ? "" : "s"} released,{" "}
-                {documentedStages} with evidence on file ({totalEvidence} file
-                {totalEvidence === 1 ? "" : "s"}).
+                {fill(
+                  work.payments.length === 1 && totalEvidence === 1
+                    ? d.timeline.paymentsSummaryOne
+                    : d.timeline.paymentsSummary,
+                  {
+                    stages: work.payments.length,
+                    documented: documentedStages,
+                    files: totalEvidence,
+                  },
+                )}
               </p>
 
               <ol className="mt-2 space-y-2">
@@ -177,32 +193,40 @@ export function WorkTimeline({
                   >
                     <div className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5">
                       <span className="text-sm font-medium text-ink">
-                        Stage {p.stageNo}
+                        {fill(d.timeline.stageLabel, { stage: p.stageNo })}
                       </span>
                       <span className="tnum text-sm text-ink">
                         {formatINR(p.amount as number)}
                       </span>
                       <span className="tnum text-2xs text-slate">
-                        released {formatDate(p.releasedAt)}
+                        {fill(d.timeline.releasedOn, {
+                          date: formatDate(p.releasedAt),
+                        })}
                       </span>
                       {p.vendorName ? (
-                        <span className="text-2xs text-slate">to {p.vendorName}</span>
+                        <span className="text-2xs text-slate">
+                          {fill(d.timeline.paidTo, { vendor: p.vendorName })}
+                        </span>
                       ) : null}
                       {p.voucherRef ? (
-                        <span className="text-2xs text-slate">{p.voucherRef}</span>
+                        <span className="text-2xs text-slate">
+                          {p.voucherRef}
+                        </span>
                       ) : null}
                     </div>
                     <div className="mt-0.5 text-2xs">
                       {p.evidence.length === 0 ? (
                         <span className="font-medium text-severity-critical">
-                          No asset photograph or document on record for this stage
+                          {d.timeline.noEvidenceForStage}
                         </span>
                       ) : (
                         <span className="text-slate">
                           {p.evidence
-                            .map(
-                              (e) =>
-                                `${e.kind.toLowerCase()} uploaded ${formatDate(e.uploadedAt)}`,
+                            .map((e) =>
+                              fill(d.timeline.evidenceUploaded, {
+                                kind: e.kind.toLowerCase(),
+                                date: formatDate(e.uploadedAt),
+                              }),
                             )
                             .join(" · ")}
                         </span>
@@ -221,29 +245,28 @@ export function WorkTimeline({
           step={{
             key: "completion-window",
             stepNames: ["Completion window"],
-            title: "One-year completion window",
-            actor: "Scheme guideline",
+            title: d.timeline.windowTitle,
+            actor: d.timeline.schemeGuideline,
             at: work.expectedCompletionAt,
-            detail: work.expectedCompletionAt ? (
-              <>
-                Sanctioned works are generally required to be completed within one
-                year. Progress currently recorded at {work.progressPct}%.
-              </>
-            ) : undefined,
-            pending: "Not applicable until the work is sanctioned.",
+            detail: work.expectedCompletionAt
+              ? fill(d.timeline.windowDetail, { progress: work.progressPct })
+              : undefined,
+            pending: d.timeline.windowPending,
           }}
-          alerts={alerts.filter((a) => ALERT_TYPE_STEP[a.type] === "Completion window")}
+          alerts={alerts.filter(
+            (a) => ALERT_TYPE_STEP[a.type] === "Completion window",
+          )}
         />
 
         <TimelineStep
           step={{
             key: "complete",
             stepNames: [],
-            title: "Complete on the ground",
-            actor: work.ia?.name ?? "Implementing agency",
+            title: d.timeline.groundTitle,
+            actor: work.ia?.name ?? d.timeline.implementingAgency,
             at: work.completedAt,
-            detail: work.completedAt ? <>Work physically finished.</> : undefined,
-            pending: "Not yet reported as finished.",
+            detail: work.completedAt ? d.timeline.groundDetail : undefined,
+            pending: d.timeline.groundPending,
           }}
           alerts={[]}
         />
@@ -253,17 +276,11 @@ export function WorkTimeline({
           step={{
             key: "marked",
             stepNames: ["Completion marking", "Across the whole record"],
-            title: "Marked complete by the implementing agency",
-            actor: work.ia?.name ?? "Implementing agency",
+            title: d.timeline.markedTitle,
+            actor: work.ia?.name ?? d.timeline.implementingAgency,
             at: work.markedCompleteAt,
-            detail: work.markedCompleteAt ? (
-              <>
-                The work now appears as completed. This final step is what makes a
-                finished work visible as finished.
-              </>
-            ) : undefined,
-            pending:
-              "Not marked. Until the agency records completion, this work does not appear as completed anywhere — including on the public dashboard.",
+            detail: work.markedCompleteAt ? d.timeline.markedDetail : undefined,
+            pending: d.timeline.markedPending,
           }}
           alerts={alerts.filter((a) =>
             ["Completion marking", "Across the whole record"].includes(
@@ -324,13 +341,16 @@ function StepHeading({
   actor: string;
   at: Date | null;
 }) {
+  const d = tr();
   return (
     <div className="flex flex-wrap items-baseline gap-x-3">
-      <h3 className={clsx("text-sm font-medium", at ? "text-ink" : "text-slate")}>
+      <h3
+        className={clsx("text-sm font-medium", at ? "text-ink" : "text-slate")}
+      >
         {title}
       </h3>
       <span className="tnum text-2xs text-slate">
-        {at ? formatDate(at) : "pending"}
+        {at ? formatDate(at) : d.timeline.pending}
       </span>
       <span className="text-2xs text-slate">{actor}</span>
     </div>
@@ -338,6 +358,7 @@ function StepHeading({
 }
 
 function AlertList({ alerts }: { alerts: TimelineAlert[] }) {
+  const d: Dictionary = tr();
   if (alerts.length === 0) return null;
   return (
     <ul className="mt-2 space-y-1.5">
@@ -345,7 +366,7 @@ function AlertList({ alerts }: { alerts: TimelineAlert[] }) {
         <li key={a.id}>
           <div className="flex flex-wrap items-center gap-2">
             <SeverityBadge severity={a.severity}>
-              {a.severity.toLowerCase()}
+              {d.severity[a.severity]}
             </SeverityBadge>
             <span className="tnum rounded border border-line bg-white px-1.5 py-0.5 text-2xs font-semibold text-ink">
               {a.score}
@@ -354,10 +375,13 @@ function AlertList({ alerts }: { alerts: TimelineAlert[] }) {
               href={`/alerts/${a.id}`}
               className="text-sm font-medium text-navy hover:underline"
             >
-              {ALERT_TYPE_LABELS[a.type]}
+              {d.alertType[a.type]}
             </Link>
           </div>
-          <p className="mt-0.5 max-w-3xl text-2xs leading-relaxed text-slate">
+          <p
+            data-detector-text
+            className="mt-0.5 max-w-3xl text-2xs leading-relaxed text-slate"
+          >
             {a.reason}
           </p>
         </li>

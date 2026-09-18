@@ -6,11 +6,23 @@ import type { AlertState } from "@prisma/client";
 
 import { recordReview, type ReviewResult } from "@/app/actions/alerts";
 import { Card, CardHeader } from "@/components/ui";
-import {
-  ACTIONS,
-  MIN_NOTE_LENGTH,
-  type ReviewAction,
-} from "@/lib/review";
+import type { Dictionary } from "@/lib/i18n/en";
+import { fill } from "@/lib/i18n/locale";
+import { ACTIONS, MIN_NOTE_LENGTH, type ReviewAction } from "@/lib/review";
+
+/**
+ * The slice of the dictionary this panel needs.
+ *
+ * Passed down as a prop rather than read here, because this is the one
+ * interactive piece in the product and `t()` reads a cookie on the server.
+ * Narrowing it to two sections keeps the payload that crosses the boundary to
+ * what is actually rendered.
+ */
+export type ReviewLabels = {
+  review: Dictionary["review"];
+  action: Dictionary["action"];
+  alertState: Dictionary["alertState"];
+};
 
 /**
  * Where an officer records what they decided.
@@ -23,7 +35,7 @@ import {
  * reasons attached is not an audit trail.
  */
 
-function Submit({ label }: { label: string }) {
+function Submit({ label, recording }: { label: string; recording: string }) {
   const { pending } = useFormStatus();
   return (
     <button
@@ -31,7 +43,7 @@ function Submit({ label }: { label: string }) {
       disabled={pending}
       className="rounded bg-navy px-3 py-1.5 text-2xs font-medium text-white transition-colors hover:bg-ink disabled:cursor-not-allowed disabled:opacity-60"
     >
-      {pending ? "Recording…" : label}
+      {pending ? recording : label}
     </button>
   );
 }
@@ -41,12 +53,15 @@ export function ReviewPanel({
   state,
   actions,
   escalationTarget,
+  labels,
 }: {
   alertId: string;
   state: AlertState;
   actions: ReviewAction[];
   escalationTarget: string;
+  labels: ReviewLabels;
 }) {
+  const { review: r, action: act } = labels;
   const [result, formAction] = useFormState<ReviewResult | null, FormData>(
     recordReview,
     null,
@@ -57,17 +72,14 @@ export function ReviewPanel({
 
   return (
     <Card>
-      <CardHeader
-        title="Record your decision"
-        subtitle="Nothing on this platform closes an alert by itself. Every state change carries the name of the person who made it."
-      />
+      <CardHeader title={r.heading} subtitle={r.subtitle} />
 
       <form action={formAction} className="space-y-3 px-4 py-3">
         <input type="hidden" name="alertId" value={alertId} />
 
         <fieldset>
           <legend className="text-2xs font-medium uppercase tracking-wide text-slate">
-            Action
+            {r.action}
           </legend>
           <div className="mt-1.5 flex flex-wrap gap-1.5">
             {actions.map((a) => (
@@ -88,7 +100,7 @@ export function ReviewPanel({
                   className="sr-only"
                   required
                 />
-                {ACTIONS[a].label}
+                {act[a].label}
               </label>
             ))}
           </div>
@@ -96,10 +108,10 @@ export function ReviewPanel({
 
         {spec ? (
           <p className="rounded border border-line bg-paper px-3 py-2 text-2xs leading-relaxed text-slate">
-            {spec.meaning}
-            {selected === "ESCALATED" ? (
-              <> This will notify {escalationTarget}.</>
-            ) : null}
+            {selected ? act[selected].meaning : null}
+            {selected === "ESCALATED"
+              ? fill(r.escalationNotice, { target: escalationTarget })
+              : null}
           </p>
         ) : null}
 
@@ -108,11 +120,13 @@ export function ReviewPanel({
             htmlFor="note"
             className="mb-1 block text-2xs font-medium uppercase tracking-wide text-slate"
           >
-            Note{" "}
+            {r.note}{" "}
             {spec?.requiresNote ? (
-              <span className="text-severity-critical">required</span>
+              <span className="text-severity-critical">{r.required}</span>
             ) : (
-              <span className="font-normal normal-case text-slate">optional</span>
+              <span className="font-normal normal-case text-slate">
+                {r.optional}
+              </span>
             )}
           </label>
           <textarea
@@ -123,12 +137,12 @@ export function ReviewPanel({
             minLength={spec?.requiresNote ? MIN_NOTE_LENGTH : undefined}
             placeholder={
               selected === "EXPLAINED"
-                ? "What is the legitimate reason? Be specific enough that someone reading this in a year understands it."
+                ? r.placeholderExplained
                 : selected === "CLARIFICATION_SOUGHT"
-                  ? "What have you asked for, and from whom?"
+                  ? r.placeholderClarification
                   : selected === "ESCALATED"
-                    ? "Why does this need attention above your level?"
-                    : "Anything worth recording."
+                    ? r.placeholderEscalated
+                    : r.placeholderDefault
             }
             className="w-full rounded border border-line bg-white px-3 py-2 text-sm text-ink placeholder:text-slate/60"
           />
@@ -154,16 +168,17 @@ export function ReviewPanel({
 
         <div className="flex items-center justify-between gap-3">
           <p className="text-2xs text-slate">
-            Currently {state.replace(/_/g, " ").toLowerCase()}.
+            {fill(r.currentlyState, { state: labels.alertState[state] })}
           </p>
-          <Submit label={spec ? spec.label : "Record"} />
+          <Submit
+            label={selected ? act[selected].label : r.record}
+            recording={r.recording}
+          />
         </div>
       </form>
 
       <p className="border-t border-line px-4 py-2 text-2xs leading-relaxed text-slate">
-        Recording a decision does not accuse anyone of anything, and no penalty
-        or report follows from it automatically. It records what an officer
-        concluded, so that the next person to open this case can see it.
+        {r.footer}
       </p>
     </Card>
   );

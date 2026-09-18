@@ -4,6 +4,7 @@ import type { Metadata } from "next";
 import { markAllNotificationsRead } from "@/app/actions/alerts";
 import { Card, CardHeader, EmptyState, Tag } from "@/components/ui";
 import { requireSession } from "@/lib/auth";
+import { t as tr } from "@/lib/i18n";
 import { prisma } from "@/lib/db";
 import { formatNumber } from "@/lib/format";
 
@@ -21,6 +22,7 @@ export const dynamic = "force-dynamic";
  */
 export default async function NotificationsPage() {
   const { user } = await requireSession();
+  const d = tr();
 
   const [notifications, unread] = await Promise.all([
     prisma.notification.findMany({
@@ -45,23 +47,25 @@ export default async function NotificationsPage() {
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-lg font-semibold tracking-tight text-ink">
-            Notifications
+            {d.notifications.heading}
           </h1>
           <p className="mt-0.5 max-w-3xl text-2xs leading-relaxed text-slate">
-            Raised when an officer records a decision that concerns your
-            jurisdiction. Each attempt is listed with the channel and what
-            happened to it.
+            {d.notifications.subtitle}
           </p>
         </div>
         <div className="flex items-center gap-2">
-          {unread > 0 ? <Tag>{formatNumber(unread)} unread</Tag> : null}
+          {unread > 0 ? (
+            <Tag>
+              {formatNumber(unread)} {d.common.unread}
+            </Tag>
+          ) : null}
           {unread > 0 ? (
             <form action={markAllNotificationsRead}>
               <button
                 type="submit"
                 className="rounded border border-line bg-white px-2.5 py-1 text-2xs font-medium text-slate hover:bg-paper hover:text-ink"
               >
-                Mark all read
+                {d.common.markAllRead}
               </button>
             </form>
           ) : null}
@@ -70,13 +74,13 @@ export default async function NotificationsPage() {
 
       <Card>
         <CardHeader
-          title="Recent"
-          subtitle="Newest first, one entry per event with every channel it was sent on."
+          title={d.notifications.recentTitle}
+          subtitle={d.notifications.recentSubtitle}
         />
         {grouped.size === 0 ? (
           <EmptyState
-            title="Nothing yet"
-            body="You will be notified when an officer acts on an alert in your jurisdiction, or escalates one to you."
+            title={d.empty.noNotificationsTitle}
+            body={d.empty.noNotificationsBody}
           />
         ) : (
           <ul className="divide-y divide-line/60">
@@ -86,7 +90,9 @@ export default async function NotificationsPage() {
               return (
                 <li
                   key={first.id}
-                  className={isUnread ? "bg-severity-info/5 px-4 py-3" : "px-4 py-3"}
+                  className={
+                    isUnread ? "bg-severity-info/5 px-4 py-3" : "px-4 py-3"
+                  }
                 >
                   <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
                     {first.entity === "Alert" ? (
@@ -102,7 +108,10 @@ export default async function NotificationsPage() {
                       </span>
                     )}
                     <span className="tnum text-2xs text-slate">
-                      {first.createdAt.toISOString().slice(0, 16).replace("T", " ")}
+                      {first.createdAt
+                        .toISOString()
+                        .slice(0, 16)
+                        .replace("T", " ")}
                     </span>
                   </div>
 
